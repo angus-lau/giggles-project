@@ -5,12 +5,10 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { display: "none" },   // hide default bar
+        tabBarStyle: { display: "none" },
       }}
     >
       <Tabs.Screen name="index" options={{ href: null }} />
-      {/* Remove or set href: null for any screens you don't want like "explore" */}
-      {/* <Tabs.Screen name="explore" options={{ href: null }} /> */}
     </Tabs>
   );
 }
