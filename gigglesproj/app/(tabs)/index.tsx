@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, memo } from "react";
+
 import {
   View,
   FlatList,
@@ -9,8 +10,16 @@ import {
   Text,
   Animated,
   Image,
+  TextInput,
+  StyleSheet,
+  Easing,
 } from "react-native";
-import type { FlatList as RNFlatList } from "react-native";
+import {
+  PanResponder,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { Video, ResizeMode, type AVPlaybackSource } from "expo-av";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
@@ -37,31 +46,31 @@ const DATA: Item[] = [
     id: "1",
     source: require("../../assets/videos/vid1.mp4"),
     user: "justin",
-    caption: "everyone knows someone #relatable",
-    likes: "16.4K",
+    caption: "hire angus",
+    likes: "120",
     comments: "763",
   },
   {
     id: "2",
     source: require("../../assets/videos/vid2.mp4"),
-    user: "alex",
-    caption: "day in the city",
+    user: "edwin",
+    caption: "hire angus",
     likes: "2.1K",
     comments: "88",
   },
   {
     id: "3",
     source: require("../../assets/videos/vid3.mp4"),
-    user: "maria",
-    caption: "weekend vibes",
+    user: "calvin",
+    caption: "hire angus",
     likes: "9.8K",
     comments: "320",
   },
   {
     id: "4",
     source: require("../../assets/videos/vid4.mp4"),
-    user: "sam",
-    caption: "new recipe drop",
+    user: "robbie",
+    caption: "hire angus",
     likes: "4.3K",
     comments: "140",
   },
@@ -74,57 +83,117 @@ async function preload(source: AVPlaybackSource) {
     await Asset.fromURI(source.uri).downloadAsync();
 }
 
-const BottomNav = React.memo(function BottomNav() {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
-      <View style={{ paddingBottom: insets.bottom }}>
-        <BlurView
-          intensity={40}
-          tint="dark"
-          style={{ marginHorizontal: 12, marginBottom: 10, borderRadius: 20, overflow: "hidden" }}
-        >
-          <View
+const BottomNav = React.memo(
+  function BottomNav() {
+    const insets = useSafeAreaInsets();
+    return (
+      <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+        <View style={{ paddingBottom: insets.bottom }}>
+          <BlurView
+            intensity={40}
+            tint="dark"
             style={{
-              height: 64, flexDirection: "row", alignItems: "center", justifyContent: "space-around",
+              marginHorizontal: 12,
+              marginBottom: 10,
+              borderRadius: 20,
+              overflow: "hidden",
             }}
-            // reduce compositor flicker
-            // @ts-ignore
-            renderToHardwareTextureAndroid
-            // @ts-ignore
-            shouldRasterizeIOS
           >
-            <View style={{ alignItems: "center", justifyContent: "center",
-              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
-              <Feather name="home" size={24} color="white" />
-            </View>
+            <View
+              style={{
+                height: 64,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-around",
+              }}
+              // reduce compositor flicker
+              // @ts-ignore
+              renderToHardwareTextureAndroid
+              // @ts-ignore
+              shouldRasterizeIOS
+            >
+              <View
+                style={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.7,
+                  shadowRadius: 10,
+                }}
+              >
+                <Feather name="home" size={24} color="white" />
+              </View>
 
-            <View style={{ alignItems: "center", justifyContent: "center",
-              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
-              <Feather name="grid" size={24} color="white" />
-            </View>
+              <View
+                style={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.7,
+                  shadowRadius: 10,
+                }}
+              >
+                <Feather name="grid" size={24} color="white" />
+              </View>
 
-            <View style={{ width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center",
-              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 12 }}>
-              <Image source={require("../../assets/images/gigglesLogo.png")}
-                     style={{ width: 38, height: 38, resizeMode: "contain" }} />
-            </View>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.9,
+                  shadowRadius: 12,
+                }}
+              >
+                <Image
+                  source={require("../../assets/images/gigglesLogo.png")}
+                  style={{ width: 38, height: 38, resizeMode: "contain" }}
+                />
+              </View>
 
-            <View style={{ alignItems: "center", justifyContent: "center",
-              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
-            </View>
+              <View
+                style={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.7,
+                  shadowRadius: 10,
+                }}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={24}
+                  color="white"
+                />
+              </View>
 
-            <View style={{ alignItems: "center", justifyContent: "center",
-              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
-              <Feather name="user" size={24} color="white" />
+              <View
+                style={{
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.7,
+                  shadowRadius: 10,
+                }}
+              >
+                <Feather name="user" size={24} color="white" />
+              </View>
             </View>
-          </View>
-        </BlurView>
+          </BlurView>
+        </View>
       </View>
-    </View>
-  );
-}, () => true); // never re-render
+    );
+  },
+  () => true
+); // never re-render
 export default function Feed() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -146,12 +215,111 @@ export default function Feed() {
   const videoHeight = pageHeight - insets.top;
 
   const players = useRef(new Map<string, Video | null>());
-  const listRef = useRef<RNFlatList<Item>>(null);
+  const listRef = useRef<FlatList<Item>>(null);
 
   const [activeId, setActiveId] = useState<string>(DATA[0].id);
   const [paused, setPaused] = useState(false);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+
+  const [openCommentsFor, setOpenCommentsFor] = useState<string | null>(null);
+  const SHEET_H = Math.min(height * 0.85, 620);
+  const MIN_Y = height - SHEET_H; // fully open
+  const MAX_Y = height; // closed
+  const sheetY = useRef(new Animated.Value(MAX_Y)).current;
+  const inputBarY = useRef(new Animated.Value(0)).current;
+  const [kbVisible, setKbVisible] = useState(false);
+
+useEffect(() => {
+  const show = Keyboard.addListener(
+    Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+    (e) => {
+      const h = e.endCoordinates?.height ?? 0;
+      const adjusted = Math.max(0, h - (insets.bottom || 0));
+      setKbVisible(true);
+      Animated.timing(inputBarY, {
+        toValue: -adjusted,
+        duration: Platform.OS === "ios" ? Math.min(e.duration ?? 180, 180) : 160,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  );
+  const hide = Keyboard.addListener(
+    Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+    () => {
+      setKbVisible(false);
+      Animated.timing(inputBarY, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  );
+  return () => { show.remove(); hide.remove(); };
+}, [inputBarY, insets.bottom]);
+
+  // video area = space above the comments sheet (updates while dragging)
+  const videoAreaH = sheetY.interpolate({
+    inputRange: [MIN_Y, MAX_Y], //
+    outputRange: [height - SHEET_H, height],
+    extrapolate: "clamp",
+  });
+
+  const openComments = (id: string) => {
+    setOpenCommentsFor(id);
+    sheetY.setValue(MAX_Y);
+    Animated.timing(sheetY, {
+      toValue: MIN_Y,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const closeComments = () => {
+    Animated.timing(sheetY, {
+      toValue: MAX_Y,
+      duration: 180,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) setOpenCommentsFor(null);
+    });
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
+      onPanResponderMove: (_, g) => {
+        const next = Math.min(MAX_Y, Math.max(MIN_Y, MIN_Y + g.dy));
+        sheetY.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        const shouldClose = g.vy > 0.8 || g.dy > 120;
+        Animated.timing(sheetY, {
+          toValue: shouldClose ? MAX_Y : MIN_Y,
+          duration: 180,
+          useNativeDriver: false,
+        }).start(({ finished }) => {
+          if (finished && shouldClose) setOpenCommentsFor(null);
+        });
+      },
+    })
+  ).current;
+
+  // mock comments
+  const COMMENTS: { id: string; user: string; text: string; avatar?: any }[] = [
+    { id: "c1", user: "chikenstars", text: "Ts so tuff twin" },
+    { id: "c2", user: "ufo", text: "*flies past*" },
+    { id: "c3", user: "agarthan", text: "I would probably hit that" },
+    {
+      id: "c4",
+      user: "subway",
+      text: "+100 ion want the snap, go buy my sandwiches",
+    },
+    { id: "c5", user: "vat", text: "how much is the arip out of 10" },
+  ];
 
   useEffect(() => {
     players.current.forEach(async (p, id) => {
@@ -292,7 +460,7 @@ export default function Feed() {
             Animated.timing(av!, {
               toValue: toLiked ? 1 : 0,
               duration: 100,
-              useNativeDriver: true,
+              useNativeDriver: false,
             }).start();
           }}
           style={{ alignItems: "center", marginBottom: 14 }}
@@ -325,12 +493,15 @@ export default function Feed() {
         </Pressable>
 
         {/* comments */}
-        <View style={{ alignItems: "center", marginBottom: 14 }}>
+        <Pressable
+          onPress={() => openComments(item.id)}
+          style={{ alignItems: "center", marginBottom: 14 }}
+        >
           <Ionicons name="chatbubble-outline" size={30} color="white" />
           <Text style={{ color: "white", fontSize: 12, marginTop: 6 }}>
             {item.comments}
           </Text>
-        </View>
+        </Pressable>
 
         {/* bookmark */}
         <Pressable
@@ -414,64 +585,58 @@ export default function Feed() {
           overflow: "hidden",
         }}
       >
-        <Video
-          ref={(r) => {
-            players.current.set(item.id, r);
-          }}
-          source={item.source}
+        {/* Only the video compresses */}
+        <Animated.View
           style={{
             position: "absolute",
-            top: videoTop,
-            width,
-            height: videoHeight,
+            top: 0,
+            left: 0,
+            right: 0,
+            height: videoAreaH,
+            overflow: "hidden",
           }}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          shouldPlay={isActive && !paused}
-          onError={() => handleVideoError(item.id, item.source)}
-        />
-
-        {/* tap to pause/play + centered play icon when paused */}
-        <Pressable
-          onPress={() => {
-            if (isActive) setPaused((v) => !v);
-          }}
-          style={{ flex: 1 }}
         >
-          {isActive && paused ? (
-            <View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: 0, // overlay the whole visible area
-                bottom: 0,
-                alignItems: "center",
-                justifyContent: "center",
+          <View style={{ flex: 1, paddingTop: insets.top }}>
+            <Video
+              ref={(r) => {
+                players.current.set(item.id, r);
               }}
-            >
-              <View
-                style={{
-                  width: 84,
-                  height: 84,
-                  borderRadius: 42,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name="play"
-                  size={60}
-                  color="white"
-                  style={{ opacity: 0.3 }}
-                />
-              </View>
-            </View>
-          ) : null}
-        </Pressable>
+              source={item.source}
+              style={{ flex: 1, width }}
+              resizeMode={ResizeMode.COVER}
+              isLooping
+              shouldPlay={isActive && !paused}
+              onError={() => handleVideoError(item.id, item.source)}
+            />
 
-        {/* overlays */}
+            <Pressable
+              onPress={() => {
+                if (isActive) setPaused((v) => !v);
+              }}
+              style={StyleSheet.absoluteFill}
+            >
+              {isActive && paused ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons
+                    name="play"
+                    size={60}
+                    color="white"
+                    style={{ opacity: 0.3 }}
+                  />
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        </Animated.View>
+
+        {/* overlays stay stationary */}
         <TopBar />
         {RightRail(item)}
         {CaptionBar(item)}
@@ -508,6 +673,175 @@ export default function Feed() {
 
       {/* Static bottom nav, never scrolls */}
       <BottomNav />
+      {/* Comments Sheet */}
+      {openCommentsFor ? (
+        <>
+          {/* backdrop */}
+          <Pressable
+            onPress={closeComments}
+            style={{
+              ...(StyleSheet.absoluteFillObject as any),
+              backgroundColor: "rgba(0,0,0,0.45)",
+            }}
+          />
+          {/* sheet */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              height: SHEET_H,
+              transform: [{ translateY: sheetY }],
+              backgroundColor: "#121212",
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              overflow: "hidden",
+            }}
+          >
+            {/* grabber + title */}
+            <View
+              {...pan.panHandlers}
+              style={{ alignItems: "center", paddingTop: 8, paddingBottom: 6 }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: "rgba(255,255,255,0.25)",
+                }}
+              />
+              <Text style={{ color: "white", fontWeight: "700", marginTop: 8 }}>
+                Comments
+              </Text>
+            </View>
+
+            {/* comments list */}
+            <FlatList
+              data={COMMENTS}
+              keyExtractor={(c) => c.id}
+              contentContainerStyle={{
+                paddingHorizontal: 14,
+                paddingBottom: 12,
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    paddingVertical: 10,
+                  }}
+                >
+                  {/* avatar */}
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: "rgba(255,255,255,0.15)",
+                      marginRight: 10,
+                    }}
+                  />
+                  {/* text */}
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}
+                    >
+                      {item.user}
+                    </Text>
+                    <Text
+                      style={{ color: "white", fontSize: 14, marginTop: 2 }}
+                    >
+                      {item.text}
+                    </Text>
+                    <Text
+                      style={{
+                        color: "rgba(255,255,255,0.5)",
+                        fontSize: 12,
+                        marginTop: 4,
+                      }}
+                    >
+                      Reply
+                    </Text>
+                  </View>
+                  {/* radio */}
+                  <View
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      borderWidth: 2,
+                      borderColor: "rgba(255,255,255,0.5)",
+                    }}
+                  />
+                </View>
+              )}
+            />
+
+            {/* input bar */}
+            <Animated.View
+              style={{
+                transform: [{ translateY: inputBarY }], // slides above keyboard
+                paddingTop: 10,
+                paddingHorizontal: 16,
+                paddingBottom: insets.bottom + 12,
+                borderTopWidth: 0.5,
+                borderTopColor: "rgba(255,255,255,0.1)",
+                backgroundColor: "#121212",
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                {/* avatar */}
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: "rgba(255,255,255,0.3)",
+                  }}
+                />
+
+                {/* input pill */}
+                <View
+                  style={{
+                    flex: 1,
+                    marginHorizontal: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                    borderRadius: 22,
+                    paddingHorizontal: 14,
+                    minHeight: 44,
+                  }}
+                >
+                  <TextInput
+                    placeholder="Add comment..."
+                    placeholderTextColor="rgba(255,255,255,0.6)"
+                    style={{ flex: 1, color: "white", paddingVertical: 8 }}
+                    // no overlay, just focus to raise bar
+                  />
+                  <Ionicons name="happy-outline" size={20} color="rgba(255,255,255,0.8)" />
+                </View>
+
+                {/* send */}
+                <Pressable
+                  onPress={closeComments}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 16,
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                  }}
+                >
+                  <Text style={{ color: "#33c759", fontWeight: "700", fontSize: 14 }}>
+                    Send
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </Animated.View>
+        </>
+      ) : null}
     </View>
   );
 }
