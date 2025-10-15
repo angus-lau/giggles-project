@@ -1,6 +1,4 @@
-// app/(tabs)/index.tsx
-// app/(tabs)/index.tsx
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, memo } from "react";
 import {
   View,
   FlatList,
@@ -10,6 +8,7 @@ import {
   Pressable,
   Text,
   Animated,
+  Image,
 } from "react-native";
 import type { FlatList as RNFlatList } from "react-native";
 import { Video, ResizeMode, type AVPlaybackSource } from "expo-av";
@@ -75,6 +74,57 @@ async function preload(source: AVPlaybackSource) {
     await Asset.fromURI(source.uri).downloadAsync();
 }
 
+const BottomNav = React.memo(function BottomNav() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+      <View style={{ paddingBottom: insets.bottom }}>
+        <BlurView
+          intensity={40}
+          tint="dark"
+          style={{ marginHorizontal: 12, marginBottom: 10, borderRadius: 20, overflow: "hidden" }}
+        >
+          <View
+            style={{
+              height: 64, flexDirection: "row", alignItems: "center", justifyContent: "space-around",
+            }}
+            // reduce compositor flicker
+            // @ts-ignore
+            renderToHardwareTextureAndroid
+            // @ts-ignore
+            shouldRasterizeIOS
+          >
+            <View style={{ alignItems: "center", justifyContent: "center",
+              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
+              <Feather name="home" size={24} color="white" />
+            </View>
+
+            <View style={{ alignItems: "center", justifyContent: "center",
+              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
+              <Feather name="grid" size={24} color="white" />
+            </View>
+
+            <View style={{ width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center",
+              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 12 }}>
+              <Image source={require("../../assets/images/gigglesLogo.png")}
+                     style={{ width: 38, height: 38, resizeMode: "contain" }} />
+            </View>
+
+            <View style={{ alignItems: "center", justifyContent: "center",
+              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
+              <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
+            </View>
+
+            <View style={{ alignItems: "center", justifyContent: "center",
+              shadowColor: "white", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}>
+              <Feather name="user" size={24} color="white" />
+            </View>
+          </View>
+        </BlurView>
+      </View>
+    </View>
+  );
+}, () => true); // never re-render
 export default function Feed() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -91,8 +141,8 @@ export default function Feed() {
     n < 1000 ? String(n) : `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}K`;
 
   // page excludes bottom tab bar; video sits below Dynamic Island
-  const pageHeight = height - tabBarHeight;
-  const videoTop = insets.top;
+  const pageHeight = height; // full screen
+  const videoTop = insets.top; // below Dynamic Island
   const videoHeight = pageHeight - insets.top;
 
   const players = useRef(new Map<string, Video | null>());
@@ -351,52 +401,7 @@ export default function Feed() {
     </View>
   );
 
-  const BottomNav = () => (
-    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
-      <View style={{ paddingBottom: insets.bottom }}>
-        <BlurView
-          intensity={40}
-          tint="dark"
-          style={{
-            marginHorizontal: 12,
-            marginBottom: 10,
-            borderRadius: 20,
-            overflow: "hidden",
-          }}
-        >
-          <View
-            style={{
-              height: 64,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-around",
-            }}
-          >
-            <Feather name="home" size={24} color="white" />
-            <Feather name="grid" size={24} color="white" />
-            <View
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                backgroundColor: "#ff3355",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <AntDesign name="plus" size={24} color="white" />
-            </View>
-            <Ionicons
-              name="chatbubble-ellipses-outline"
-              size={24}
-              color="white"
-            />
-            <Feather name="user" size={24} color="white" />
-          </View>
-        </BlurView>
-      </View>
-    </View>
-  );
+  // replace the existing BottomNav definition
 
   const renderItem = ({ item }: { item: Item }) => {
     const isActive = item.id === activeId;
@@ -427,73 +432,82 @@ export default function Feed() {
         />
 
         {/* tap to pause/play + centered play icon when paused */}
-<Pressable
-  onPress={() => {
-    if (isActive) setPaused((v) => !v);
-  }}
-  style={{ flex: 1 }}
->
-  {isActive && paused ? (
-    <View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: 0,                 // overlay the whole visible area
-        bottom: 0,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <View
-        style={{
-          width: 84,
-          height: 84,
-          borderRadius: 42,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Ionicons name="play" size={60} color="white" style={{ opacity: 0.3 }} />
-      </View>
-    </View>
-  ) : null}
-</Pressable>
+        <Pressable
+          onPress={() => {
+            if (isActive) setPaused((v) => !v);
+          }}
+          style={{ flex: 1 }}
+        >
+          {isActive && paused ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0, // overlay the whole visible area
+                bottom: 0,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <View
+                style={{
+                  width: 84,
+                  height: 84,
+                  borderRadius: 42,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons
+                  name="play"
+                  size={60}
+                  color="white"
+                  style={{ opacity: 0.3 }}
+                />
+              </View>
+            </View>
+          ) : null}
+        </Pressable>
 
         {/* overlays */}
         <TopBar />
         {RightRail(item)}
         {CaptionBar(item)}
-        <BottomNav />
       </View>
     );
   };
 
   return (
-    <FlatList
-      ref={listRef}
-      data={DATA}
-      keyExtractor={(i) => i.id}
-      renderItem={renderItem}
-      pagingEnabled
-      snapToInterval={pageHeight}
-      decelerationRate="fast"
-      bounces={false}
-      scrollEventThrottle={16}
-      snapToAlignment="start"
-      showsVerticalScrollIndicator={false}
-      onMomentumScrollEnd={onMomentumScrollEnd}
-      initialNumToRender={3}
-      windowSize={5}
-      maxToRenderPerBatch={5}
-      removeClippedSubviews={false}
-      getItemLayout={(_, i) => ({
-        length: pageHeight,
-        offset: pageHeight * i,
-        index: i,
-      })}
-      contentInsetAdjustmentBehavior="never"
-    />
+    <View style={{ flex: 1, backgroundColor: "black" }}>
+      <FlatList
+        ref={listRef}
+        data={DATA}
+        keyExtractor={(i) => i.id}
+        renderItem={renderItem}
+        pagingEnabled
+        snapToInterval={height} // use full screen height
+        decelerationRate="fast"
+        bounces={false}
+        scrollEventThrottle={16}
+        snapToAlignment="start"
+        showsVerticalScrollIndicator={false}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        initialNumToRender={3}
+        windowSize={5}
+        maxToRenderPerBatch={5}
+        removeClippedSubviews={false}
+        getItemLayout={(_, i) => ({
+          length: height,
+          offset: height * i,
+          index: i,
+        })}
+        contentInsetAdjustmentBehavior="never"
+      />
+
+      {/* Static bottom nav, never scrolls */}
+      <BottomNav />
+    </View>
   );
 }
