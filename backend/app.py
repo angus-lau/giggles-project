@@ -1,7 +1,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-import boto3, os
+import boto3, os, time
 from uuid import uuid4
 from dotenv import load_dotenv
 from supabase import create_client
@@ -191,6 +191,167 @@ def user_videos(user_id: str, limit: int = 20, cursor: str | None = None):
     if cursor:
         q = q.lt("created_at", cursor)
     return {"videos": q.execute().data}
+
+# User profile summary: basic fields + counts
+@app.get("/users/{user_id}")
+def user_profile(user_id: str):
+    # base user info
+    try:
+        u = (
+            sb.table("users")
+            .select("id, username, avatar_url, aura")  # aura optional; will be None if column absent
+            .eq("id", user_id)
+            .single()
+            .execute()
+            .data
+        )
+    except Exception:
+        # fallback without aura column
+        try:
+            u = (
+                sb.table("users")
+                .select("id, username, avatar_url")
+                .eq("id", user_id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception:
+            raise HTTPException(404, "user not found")
+
+    if not u:
+        raise HTTPException(404, "user not found")
+
+    # posts count
+    try:
+        posts = (
+            sb.table("videos").select("*", count="exact").eq("user_id", user_id).execute().count
+            or 0
+        )
+    except Exception:
+        posts = 0
+
+    # followers/following counts (tolerate missing table 'follows')
+    followers = 0
+    following = 0
+    try:
+        followers = (
+            sb.table("follows").select("*", count="exact").eq("followed_id", user_id).execute().count
+            or 0
+        )
+    except Exception:
+        followers = 0
+    try:
+        following = (
+            sb.table("follows").select("*", count="exact").eq("follower_id", user_id).execute().count
+            or 0
+        )
+    except Exception:
+        following = 0
+
+    return {
+        "user": {
+            "id": u.get("id"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url"),
+            "aura": u.get("aura") or 0,
+            "posts": int(posts),
+            "followers": int(followers),
+            "following": int(following),
+        }
+    }
+
+# --- Follow APIs ---
+@app.get("/users/{target_id}/is_following")
+def is_following(target_id: str, follower_id: str):
+    try:
+        rows = (
+            sb.table("follows")
+            .select("follower_id")
+            .eq("follower_id", follower_id)
+            .eq("followed_id", target_id)
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        print("IS_FOLLOWING ROWS", rows)
+        return {"is_following": len(rows) > 0}
+    except Exception as e:
+        return {"is_following": False, "warning": f"{e}"}
+
+@app.post("/users/{target_id}/follow")
+def follow_user(target_id: str, follower_id: str):
+    if target_id == follower_id:
+        raise HTTPException(400, "cannot follow self")
+    # upsert to avoid duplicates when tapping quickly
+    try:
+        res = (
+            sb.table("follows")
+            .upsert({"follower_id": follower_id, "followed_id": target_id}, on_conflict="follower_id,followed_id")
+            .execute()
+        )
+        print("UPSERT FOLLOW RESP", getattr(res, "data", None), getattr(res, "status_code", None))
+    except Exception as e:
+        print("UPSERT FOLLOW ERROR", repr(e))
+        # try plain insert once
+        try:
+            res2 = sb.table("follows").insert({"follower_id": follower_id, "followed_id": target_id}).execute()
+            print("INSERT FOLLOW RESP", getattr(res2, "data", None), getattr(res2, "status_code", None))
+        except Exception as e2:
+            print("INSERT FOLLOW ERROR", repr(e2))
+            raise HTTPException(500, f"failed to write follows: {e2}")
+
+    # retry the count a few times to avoid read-after-write race
+    followers = 0
+    last_err = None
+    for _ in range(3):
+        try:
+            followers = (
+                sb.table("follows")
+                .select("*", count="exact")
+                .eq("followed_id", target_id)
+                .execute()
+                .count or 0
+            )
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(0.08)
+
+    print("FOLLOW POST", {"target": target_id, "follower": follower_id})
+    print("FOLLOW COUNT", {"followers": followers, "err": str(last_err) if last_err else None})
+    return {"followers": int(followers)}
+
+@app.delete("/users/{target_id}/follow")
+def unfollow_user(target_id: str, follower_id: str):
+    if target_id == follower_id:
+        raise HTTPException(400, "cannot unfollow self")
+    try:
+        dres = sb.table("follows").delete().eq("follower_id", follower_id).eq("followed_id", target_id).execute()
+        print("DELETE FOLLOW RESP", getattr(dres, "data", None), getattr(dres, "status_code", None))
+    except Exception as e:
+        print("DELETE FOLLOW ERROR", repr(e))
+        raise HTTPException(500, f"failed to delete follows: {e}")
+
+    followers = 0
+    last_err = None
+    for _ in range(3):
+        try:
+            followers = (
+                sb.table("follows")
+                .select("*", count="exact")
+                .eq("followed_id", target_id)
+                .execute()
+                .count or 0
+            )
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(0.08)
+
+    print("FOLLOW DELETE", {"target": target_id, "follower": follower_id})
+    print("FOLLOW COUNT", {"followers": followers, "err": str(last_err) if last_err else None})
+    return {"followers": int(followers)}
 
 @app.get("/health")
 def health():

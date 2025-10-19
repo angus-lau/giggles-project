@@ -35,7 +35,8 @@ import { FontAwesome } from "@expo/vector-icons";
 type Item = {
   id: string;
   url: string;           // S3 URL
-  user: string;          // display name or user id
+  user: string;          // display name or username
+  user_id: string;       // users.id UUID
   caption: string;
   likes: number;
   comments: number;
@@ -65,6 +66,7 @@ const toItem = (v: any): Item => ({
   id: v?.id ?? '',
   url: v?.url ?? '',
   user: (v && (v.users?.username || v.user_id?.slice(0, 6))) || 'user',
+  user_id: v?.user_id ?? '',
   caption: v?.caption ?? '',
   likes: Number(v?.like_count ?? 0) || 0,
   comments: Number(v?.comment_count ?? 0) || 0,
@@ -183,6 +185,7 @@ const BottomNav = React.memo(
   () => true
 ); // never re-render
 export default function Feed() {
+  const router = useRouter();
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
@@ -404,24 +407,34 @@ useEffect(() => {
 
   useEffect(() => {
     const i = items.findIndex((d) => d.id === activeId);
-    const prev = items[i - 1]?.url;
-    const next = items[i + 1]?.url;
+    if (i < 0) return;
+    const ahead = [i + 1, i + 2, i + 3];
+    const behind = [i - 1, i - 2];
+    const targets = [...behind, ...ahead]
+      .filter((idx) => idx >= 0 && idx < items.length)
+      .map((idx) => items[idx]?.url)
+      .filter(Boolean) as string[];
+
     (async () => {
       try {
-        if (prev) await preload({ uri: prev });
-        if (next) await preload({ uri: next });
+        await Promise.all(targets.map((u) => preload({ uri: u })));
       } catch {}
-      for (const id of [items[i - 1]?.id, items[i + 1]?.id].filter(
-        Boolean
-      ) as string[]) {
+      // pause neighbors to keep decoder free
+      for (const id of [items[i - 1]?.id, items[i + 1]?.id, items[i + 2]?.id].filter(Boolean) as string[]) {
         try {
-          await players.current
-            .get(id)
-            ?.setStatusAsync({ shouldPlay: false, positionMillis: 0 });
+          await players.current.get(id)?.setStatusAsync({ shouldPlay: false });
         } catch {}
       }
     })();
   }, [activeId, items]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    const first = items.slice(0, 6).map((it) => it.url).filter(Boolean);
+    (async () => {
+      try { await Promise.all(first.map((u) => preload({ uri: u }))); } catch {}
+    })();
+  }, [items.length]);
 
   useEffect(() => {
     setPaused(false);
@@ -650,9 +663,11 @@ useEffect(() => {
           marginBottom: 6,
         }}
       >
-        <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
-          {item.user}
-        </Text>
+        <Pressable onPress={() => router.push(`/profile?uid=${encodeURIComponent(item.user_id)}&uname=${encodeURIComponent(item.user)}`)}>
+          <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
+            {item.user}
+          </Text>
+        </Pressable>
         <MaterialCommunityIcons
           name="check-decagram"
           size={16}
