@@ -50,7 +50,7 @@ async def upload(
     except Exception as e:
         raise HTTPException(500, str(e))
 
-# Feed (latest videos with counters)
+# Feed (latest videos with counters; persisted like_count/comment_count)
 @app.get("/videos")
 def list_videos(limit: int = 20, cursor: str | None = None):
     q = sb.table("videos").select("*, users!videos_user_id_fkey(username)")
@@ -63,34 +63,57 @@ def list_videos(limit: int = 20, cursor: str | None = None):
 # Video detail + top comments + # of likes and comments
 @app.get("/videos/{video_id}")
 def video_detail(video_id: str, comments_limit: int = 10):
-    # video info + uploader username
-    v = (
-        sb.table("videos")
-        .select("*, users!videos_user_id_fkey(username)")
-        .eq("id", video_id)
-        .single()
-        .execute()
-        .data
-    )
+    # video + uploader username; return JSON 404 if not found
+    try:
+        v_resp = (
+            sb.table("videos")
+            .select("*, users!videos_user_id_fkey(username)")
+            .eq("id", video_id)
+            .single()
+            .execute()
+        )
+        v = v_resp.data
+    except Exception as e:
+        raise HTTPException(404, "video not found")
 
-    # counts
-    like_count = (
-        sb.table("likes").select("count()", count="exact").eq("video_id", video_id).execute().count
-    )
-    comment_count = (
-        sb.table("comments").select("count()", count="exact").eq("video_id", video_id).execute().count
-    )
+    if not v:
+        raise HTTPException(404, "video not found")
 
-    # top comments
-    cs = (
-        sb.table("comments")
-        .select("id, user_id, text, created_at")
-        .eq("video_id", video_id)
-        .order("created_at", desc=True)
-        .limit(comments_limit)
-        .execute()
-        .data
-    )
+    # counts: prefer persisted, else recompute
+    like_count = int(v.get("like_count") or 0)
+    comment_count = int(v.get("comment_count") or 0)
+    if like_count == 0:
+        try:
+            like_count = (
+                sb.table("likes").select("*", count="exact").eq("video_id", video_id).execute().count
+                or 0
+            )
+        except Exception:
+            like_count = 0
+    if comment_count == 0:
+        try:
+            comment_count = (
+                sb.table("comments").select("*", count="exact").eq("video_id", video_id).execute().count
+                or 0
+            )
+        except Exception:
+            comment_count = 0
+
+    # comments list; tolerate missing table
+    cs = []
+    try:
+        cs = (
+            sb.table("comments")
+            .select("id, user_id, text, created_at, username, users!comments_user_id_fkey(username)")
+            .eq("video_id", video_id)
+            .order("created_at", desc=True)
+            .limit(comments_limit)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        cs = []
 
     v["like_count"] = like_count
     v["comment_count"] = comment_count
@@ -100,23 +123,48 @@ def video_detail(video_id: str, comments_limit: int = 10):
 @app.post("/videos/{video_id}/like")
 def like(video_id: str, user_id: str):
     sb.table("likes").upsert({"video_id": video_id, "user_id": user_id}).execute()
-    # read the updated counter (assumes DB trigger maintains like_count)
-    vr = sb.table("videos").select("like_count").eq("id", video_id).single().execute().data
-    cnt = (vr or {}).get("like_count")
-    return {"ok": True, "like_count": cnt}
+    # recompute and persist like_count on videos
+    lc = (
+        sb.table("likes").select("*", count="exact").eq("video_id", video_id).execute().count
+        or 0
+    )
+    sb.table("videos").update({"like_count": lc}).eq("id", video_id).execute()
+    return {"ok": True, "like_count": lc}
 
 @app.delete("/videos/{video_id}/like")
 def unlike(video_id: str, user_id: str):
     sb.table("likes").delete().eq("video_id", video_id).eq("user_id", user_id).execute()
-    vr = sb.table("videos").select("like_count").eq("id", video_id).single().execute().data
-    cnt = (vr or {}).get("like_count")
-    return {"ok": True, "like_count": cnt}
+    lc = (
+        sb.table("likes").select("*", count="exact").eq("video_id", video_id).execute().count
+        or 0
+    )
+    sb.table("videos").update({"like_count": lc}).eq("id", video_id).execute()
+    return {"ok": True, "like_count": lc}
 
 # Comment
 @app.post("/videos/{video_id}/comments")
 def add_comment(video_id: str, user_id: str, text: str):
-    row = sb.table("comments").insert({"video_id": video_id, "user_id": user_id, "text": text}).execute().data[0]
-    return {"comment": row}
+    if not (video_id and user_id and (text or '').strip()):
+        raise HTTPException(400, "missing video_id, user_id, or text")
+    try:
+        user = sb.table("users").select("username").eq("id", user_id).single().execute().data
+        username = user["username"] if user else None
+        res = (
+            sb.table("comments")
+            .insert({"video_id": video_id, "user_id": user_id, "username": username, "text": text})
+            .execute()
+        )
+        data = getattr(res, 'data', None) or []
+        row = data[0] if data else {"video_id": video_id, "user_id": user_id, "text": text, "username": username}
+        # recompute and persist comment_count on videos
+        cc = (
+            sb.table("comments").select("*", count="exact").eq("video_id", video_id).execute().count
+            or 0
+        )
+        sb.table("videos").update({"comment_count": cc}).eq("id", video_id).execute()
+        return {"comment": row, "comment_count": cc}
+    except Exception as e:
+        raise HTTPException(500, f"failed to insert comment: {e}")
 
 # User profile videos
 @app.get("/users/{user_id}/videos")

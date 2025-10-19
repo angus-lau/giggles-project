@@ -41,11 +41,11 @@ type Item = {
   comments: number;
 };
 
-type Comment = { id: string; user_id: string; text: string; created_at?: string };
+type Comment = { id: string; user_id: string; text: string; created_at?: string; username?: string; users?: { username?: string } };
 
 // temporary until auth
-const USER_ID = "demo-user-001";
-const USERNAME = "you";
+const USER_ID = "d4705bec-b3ab-4d7c-aa28-a10470adcbd7"; // users.id UUID
+const USERNAME = "Angus";
 
 // Use the correct host per environment:
 // - iOS Simulator:            http://127.0.0.1:8000
@@ -62,12 +62,12 @@ async function preload(source: AVPlaybackSource) {
 }
 
 const toItem = (v: any): Item => ({
-  id: v.id,
-  url: v.url,
-  user: v?.users?.username ?? v.user_id?.slice(0,6) ?? "user",
-  caption: v.caption ?? "",
-  likes: v.like_count ?? 0,
-  comments: v.comment_count ?? 0,
+  id: v?.id ?? '',
+  url: v?.url ?? '',
+  user: (v && (v.users?.username || v.user_id?.slice(0, 6))) || 'user',
+  caption: v?.caption ?? '',
+  likes: Number(v?.like_count ?? 0) || 0,
+  comments: Number(v?.comment_count ?? 0) || 0,
 });
 
 const BottomNav = React.memo(
@@ -224,6 +224,10 @@ export default function Feed() {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   const [openCommentsFor, setOpenCommentsFor] = useState<string | null>(null);
+  const [commentsByVideo, setCommentsByVideo] = useState<Record<string, Comment[]>>({});
+  const [commentInput, setCommentInput] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState(false);
+
   const SHEET_H = Math.min(height * 0.85, 620);
   const MIN_Y = height - SHEET_H; // fully open
   const MAX_Y = height; // closed
@@ -268,14 +272,39 @@ useEffect(() => {
     extrapolate: "clamp",
   });
 
-  const openComments = (id: string) => {
+  const openComments = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/videos/${id}?comments_limit=100`);
+      const txt = await res.text();
+      let data: any = null;
+      try {
+        data = txt ? JSON.parse(txt) : null;
+      } catch (parseErr) {
+        console.warn('Non-JSON response for /videos/{id}:', txt?.slice(0, 200));
+        data = null;
+      }
+
+      if (!res.ok) {
+        console.warn('Server error', res.status, data || txt);
+        setCommentsByVideo((prev) => ({ ...prev, [id]: prev[id] ?? [] }));
+      } else {
+        const serverComments: Comment[] = (data?.comments ?? []).map((c: any) => ({
+          id: c.id,
+          user_id: c.user_id,
+          text: c.text,
+          created_at: c.created_at,
+          username: c.username,
+          users: c.users,
+        }));
+        setCommentsByVideo((prev) => ({ ...prev, [id]: serverComments }));
+      }
+    } catch (e) {
+      console.warn('Failed to load comments', e);
+      setCommentsByVideo((prev) => ({ ...prev, [id]: prev[id] ?? [] }));
+    }
     setOpenCommentsFor(id);
     sheetY.setValue(MAX_Y);
-    Animated.timing(sheetY, {
-      toValue: MIN_Y,
-      duration: 220,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(sheetY, { toValue: MIN_Y, duration: 220, useNativeDriver: false }).start();
   };
 
   const closeComments = () => {
@@ -308,19 +337,6 @@ useEffect(() => {
       },
     })
   ).current;
-
-  // mock comments
-  const COMMENTS: { id: string; user: string; text: string; avatar?: any }[] = [
-    { id: "c1", user: "chikenstars", text: "Ts so tuff twin" },
-    { id: "c2", user: "ufo", text: "*flies past*" },
-    { id: "c3", user: "agarthan", text: "I would probably hit that" },
-    {
-      id: "c4",
-      user: "subway",
-      text: "+100 ion want the snap, go buy my sandwiches",
-    },
-    { id: "c5", user: "vat", text: "how much is the arip out of 10" },
-  ];
 
   useEffect(() => {
     players.current.forEach(async (p, id) => {
@@ -719,65 +735,23 @@ useEffect(() => {
 
             {/* comments list */}
             <FlatList
-              data={COMMENTS}
-              keyExtractor={(c) => c.id}
-              contentContainerStyle={{
-                paddingHorizontal: 14,
-                paddingBottom: 12,
-              }}
-              renderItem={({ item }) => (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "flex-start",
-                    paddingVertical: 10,
-                  }}
-                >
-                  {/* avatar */}
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: "rgba(255,255,255,0.15)",
-                      marginRight: 10,
-                    }}
-                  />
-                  {/* text */}
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}
-                    >
-                      {item.user}
-                    </Text>
-                    <Text
-                      style={{ color: "white", fontSize: 14, marginTop: 2 }}
-                    >
-                      {item.text}
-                    </Text>
-                    <Text
-                      style={{
-                        color: "rgba(255,255,255,0.5)",
-                        fontSize: 12,
-                        marginTop: 4,
-                      }}
-                    >
-                      Reply
-                    </Text>
-                  </View>
-                  {/* radio */}
-                  <View
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 11,
-                      borderWidth: 2,
-                      borderColor: "rgba(255,255,255,0.5)",
-                    }}
-                  />
-                </View>
-              )}
-            />
+  data={openCommentsFor ? (commentsByVideo[openCommentsFor] ?? []) : []}
+  keyExtractor={(c) => c.id}
+  contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 12 }}
+  renderItem={({ item }) => (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", paddingVertical: 10 }}>
+      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", marginRight: 10 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
+          {item.username || item.users?.username || item.user_id?.slice(0, 6) || "user"}
+        </Text>
+        <Text style={{ color: "white", fontSize: 14, marginTop: 2 }}>
+          {item.text}
+        </Text>
+      </View>
+    </View>
+  )}
+/>
 
             {/* input bar */}
             <Animated.View
@@ -816,28 +790,109 @@ useEffect(() => {
                   }}
                 >
                   <TextInput
-                    placeholder="Add comment..."
-                    placeholderTextColor="rgba(255,255,255,0.6)"
-                    style={{ flex: 1, color: "white", paddingVertical: 8 }}
-                    // no overlay, just focus to raise bar
-                  />
-                  <Ionicons name="happy-outline" size={20} color="rgba(255,255,255,0.8)" />
-                </View>
+  placeholder="Add comment..."
+  placeholderTextColor="rgba(255,255,255,0.6)"
+  style={{ flex: 1, color: "white", paddingVertical: 8 }}
+  value={openCommentsFor ? (commentInput[openCommentsFor] ?? "") : ""}
+  onChangeText={(t) => {
+    if (!openCommentsFor) return;
+    setCommentInput((prev) => ({ ...prev, [openCommentsFor]: t }));
+  }}
+  returnKeyType="send"
+  onSubmitEditing={async () => {
+    if (!openCommentsFor) return;
+    const text = (commentInput[openCommentsFor] ?? "").trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(USER_ID)}&text=${encodeURIComponent(text)}`;
+      const resp = await fetch(url, { method: 'POST' });
+      const raw = await resp.text();
+      let json: any = null;
+      try {
+        json = raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        console.warn('Non-JSON POST /comments response:', raw?.slice(0, 200));
+      }
+      if (!resp.ok) {
+        console.warn('POST /comments failed', resp.status, json || raw);
+        setSending(false);
+        return;
+      }
+      const newRow: Comment = json?.comment ?? { id: String(Date.now()), user_id: USER_ID, text, username: USERNAME };
+      setCommentsByVideo((prev) => ({
+        ...prev,
+        [openCommentsFor]: [...(prev[openCommentsFor] ?? []), newRow],
+      }));
+      setCommentInput((prev) => ({ ...prev, [openCommentsFor]: "" }));
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === openCommentsFor
+            ? { ...it, comments: Number((json && (json.comment_count ?? json.video?.comment_count)) ?? (it.comments ?? 0) + 1) }
+            : it
+        )
+      );
+    } catch (e) {
+      console.warn("Failed to send comment", e);
+    } finally {
+      setSending(false);
+    }
+  }}
+/>
+<Ionicons name="happy-outline" size={20} color="rgba(255,255,255,0.8)" />
+</View>
 
-                {/* send */}
-                <Pressable
-                  onPress={closeComments}
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 16,
-                    backgroundColor: "rgba(255,255,255,0.12)",
-                  }}
-                >
-                  <Text style={{ color: "#33c759", fontWeight: "700", fontSize: 14 }}>
-                    Send
-                  </Text>
-                </Pressable>
+<Pressable
+  disabled={sending || !openCommentsFor || !(commentInput[openCommentsFor]?.trim())}
+  onPress={async () => {
+    if (!openCommentsFor) return;
+    const text = (commentInput[openCommentsFor] ?? "").trim();
+    if (!text) return;
+    setSending(true);
+    try {
+      const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(USER_ID)}&text=${encodeURIComponent(text)}`;
+      const resp = await fetch(url, { method: 'POST' });
+      const raw = await resp.text();
+      let json: any = null;
+      try {
+        json = raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        console.warn('Non-JSON POST /comments response:', raw?.slice(0, 200));
+      }
+      if (!resp.ok) {
+        console.warn('POST /comments failed', resp.status, json || raw);
+        setSending(false);
+        return;
+      }
+      const newRow: Comment = json?.comment ?? { id: String(Date.now()), user_id: USER_ID, text, username: USERNAME };
+      setCommentsByVideo((prev) => ({
+        ...prev,
+        [openCommentsFor]: [...(prev[openCommentsFor] ?? []), newRow],
+      }));
+      setCommentInput((prev) => ({ ...prev, [openCommentsFor]: "" }));
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === openCommentsFor
+            ? { ...it, comments: Number((json && (json.comment_count ?? json.video?.comment_count)) ?? (it.comments ?? 0) + 1) }
+            : it
+        )
+      );
+    } catch (e) {
+      console.warn("Failed to send comment", e);
+    } finally {
+      setSending(false);
+    }
+  }}
+  style={{
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    opacity: sending || !openCommentsFor || !(commentInput[openCommentsFor]?.trim()) ? 0.5 : 1,
+  }}
+>
+  <Text style={{ color: "#33c759", fontWeight: "700", fontSize: 14 }}>Send</Text>
+</Pressable>
               </View>
             </Animated.View>
           </Animated.View>
