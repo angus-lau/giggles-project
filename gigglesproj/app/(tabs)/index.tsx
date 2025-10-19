@@ -41,6 +41,12 @@ type Item = {
   comments: number;
 };
 
+type Comment = { id: string; user_id: string; text: string; created_at?: string };
+
+// temporary until auth
+const USER_ID = "demo-user-001";
+const USERNAME = "you";
+
 // Use the correct host per environment:
 // - iOS Simulator:            http://127.0.0.1:8000
 // - Android Emulator:         http://10.0.2.2:8000
