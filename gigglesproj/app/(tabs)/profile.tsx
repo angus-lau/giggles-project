@@ -132,28 +132,37 @@ __pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now()
     try {
       const r = await fetch(`${API_BASE}/users/${targetUserId}/likes`);
       const j = await r.json();
-      
       const ids: string[] = j?.video_ids ?? [];
       if (!ids.length) {
         setLikedVideos([]);
+        // update cache with empty list
+        const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+        __pcache.set(targetUserId, { ...current, likes: [], ts: Date.now() });
         return;
       }
+
       const rows = await Promise.all(
         ids.map(async (id) => {
           try {
             const vr = await fetch(`${API_BASE}/videos/${id}`);
             const vj = await vr.json();
-            const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
-__pcache.set(targetUserId, { ...current, likes: rows.filter(Boolean) as any[], ts: Date.now() });
-            return vj?.video;
+            return vj?.video || null;
           } catch {
             return null;
           }
         })
       );
-      setLikedVideos(rows.filter(Boolean));
-      const urls = rows.filter(Boolean).slice(0, 12).map((v: any) => v.url).filter(Boolean);
+
+      const list = rows.filter(Boolean) as any[];
+      setLikedVideos(list);
+
+      // prefetch media for faster thumbs
+      const urls = list.slice(0, 12).map((v: any) => v.url).filter(Boolean);
       prefetchAssets(urls);
+
+      // write-through cache AFTER rows exist
+      const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+      __pcache.set(targetUserId, { ...current, likes: list, ts: Date.now() });
     } catch {
       setLikedVideos([]);
     }
