@@ -34,47 +34,19 @@ import {
 import { FontAwesome } from "@expo/vector-icons";
 type Item = {
   id: string;
-  source: AVPlaybackSource;
-  user: string;
+  url: string;           // S3 URL
+  user: string;          // display name or user id
   caption: string;
-  likes: string;
-  comments: string;
+  likes: number;
+  comments: number;
 };
 
-const DATA: Item[] = [
-  {
-    id: "1",
-    source: require("../../assets/videos/vid1.mp4"),
-    user: "justin",
-    caption: "hire angus",
-    likes: "120",
-    comments: "763",
-  },
-  {
-    id: "2",
-    source: require("../../assets/videos/vid2.mp4"),
-    user: "edwin",
-    caption: "hire angus",
-    likes: "2.1K",
-    comments: "88",
-  },
-  {
-    id: "3",
-    source: require("../../assets/videos/vid3.mp4"),
-    user: "calvin",
-    caption: "hire angus",
-    likes: "9.8K",
-    comments: "320",
-  },
-  {
-    id: "4",
-    source: require("../../assets/videos/vid4.mp4"),
-    user: "robbie",
-    caption: "hire angus",
-    likes: "4.3K",
-    comments: "140",
-  },
-];
+// Use the correct host per environment:
+// - iOS Simulator:            http://127.0.0.1:8000
+// - Android Emulator:         http://10.0.2.2:8000
+// - Physical device on Wi‑Fi: http://<YOUR_LAN_IP>:8000  (e.g., http://192.168.1.23:8000)
+const API_BASE = "http://192.168.1.87:8000";
+
 
 async function preload(source: AVPlaybackSource) {
   if (typeof source === "number")
@@ -82,6 +54,15 @@ async function preload(source: AVPlaybackSource) {
   else if ("uri" in source && source.uri)
     await Asset.fromURI(source.uri).downloadAsync();
 }
+
+const toItem = (v: any): Item => ({
+  id: v.id,
+  url: v.url,
+  user: v?.users?.username ?? v.user_id?.slice(0,6) ?? "user",
+  caption: v.caption ?? "",
+  likes: v.like_count ?? 0,
+  comments: v.comment_count ?? 0,
+});
 
 const BottomNav = React.memo(
   function BottomNav() {
@@ -199,15 +180,30 @@ export default function Feed() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const likeAnims = useRef(new Map<string, Animated.Value>()).current;
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({
-    "1": 120,
-    "2": 45,
-    "3": 98,
-    "4": 60,
-  });
+  const [items, setItems] = useState<Item[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
 
   const formatCount = (n: number) =>
     n < 1000 ? String(n) : `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}K`;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/videos`);
+        const data = await res.json();
+        const mapped: Item[] = (data.videos ?? []).map(toItem);
+        setItems(mapped);
+        if (mapped.length) setActiveId(mapped[0].id);
+        // seed like counts from server values
+        const seed: Record<string, number> = {};
+        for (const it of mapped) seed[it.id] = it.likes ?? 0;
+        setLikeCounts(seed);
+      } catch (e) {
+        console.warn('Failed to load videos', e);
+      }
+    })();
+  }, []);
 
   // page excludes bottom tab bar; video sits below Dynamic Island
   const pageHeight = height; // full screen
@@ -217,7 +213,6 @@ export default function Feed() {
   const players = useRef(new Map<string, Video | null>());
   const listRef = useRef<FlatList<Item>>(null);
 
-  const [activeId, setActiveId] = useState<string>(DATA[0].id);
   const [paused, setPaused] = useState(false);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
@@ -332,15 +327,15 @@ useEffect(() => {
   }, [activeId, paused]);
 
   useEffect(() => {
-    const i = DATA.findIndex((d) => d.id === activeId);
-    const prev = DATA[i - 1]?.source;
-    const next = DATA[i + 1]?.source;
+    const i = items.findIndex((d) => d.id === activeId);
+    const prev = items[i - 1]?.url;
+    const next = items[i + 1]?.url;
     (async () => {
       try {
-        if (prev) await preload(prev);
-        if (next) await preload(next);
+        if (prev) await preload({ uri: prev });
+        if (next) await preload({ uri: next });
       } catch {}
-      for (const id of [DATA[i - 1]?.id, DATA[i + 1]?.id].filter(
+      for (const id of [items[i - 1]?.id, items[i + 1]?.id].filter(
         Boolean
       ) as string[]) {
         try {
@@ -350,7 +345,7 @@ useEffect(() => {
         } catch {}
       }
     })();
-  }, [activeId]);
+  }, [activeId, items]);
 
   useEffect(() => {
     setPaused(false);
@@ -358,7 +353,7 @@ useEffect(() => {
 
   const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.y / pageHeight);
-    const next = DATA[index]?.id;
+    const next = items[index]?.id;
     if (next && next !== activeId) setActiveId(next);
   };
 
@@ -499,7 +494,7 @@ useEffect(() => {
         >
           <Ionicons name="chatbubble-outline" size={30} color="white" />
           <Text style={{ color: "white", fontSize: 12, marginTop: 6 }}>
-            {item.comments}
+            {formatCount(item.comments)}
           </Text>
         </Pressable>
 
@@ -601,12 +596,12 @@ useEffect(() => {
               ref={(r) => {
                 players.current.set(item.id, r);
               }}
-              source={item.source}
+              source={{ uri: item.url }}
               style={{ flex: 1, width }}
               resizeMode={ResizeMode.COVER}
               isLooping
               shouldPlay={isActive && !paused}
-              onError={() => handleVideoError(item.id, item.source)}
+              onError={() => handleVideoError(item.id, { uri: item.url })}
             />
 
             <Pressable
@@ -648,7 +643,7 @@ useEffect(() => {
     <View style={{ flex: 1, backgroundColor: "black" }}>
       <FlatList
         ref={listRef}
-        data={DATA}
+        data={items}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
         pagingEnabled
