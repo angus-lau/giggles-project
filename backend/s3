@@ -1,0 +1,37 @@
+import boto3
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+
+
+# Load keys.env from project root (one level up from this file)
+ENV_PATH = Path(__file__).resolve().parent.parent / 'keys.env'
+load_dotenv(ENV_PATH)
+
+# Validate required environment variables
+required = ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION')
+missing = [k for k in required if not os.getenv(k)]
+if missing:
+    raise RuntimeError(f"Missing env vars: {missing}. Expected in {ENV_PATH}")
+
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_REGION = os.getenv('AWS_REGION')
+
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION
+)
+
+response = s3.list_buckets()
+# check what buckets we have
+for bucket in response['Buckets']:
+    print(bucket['Name'])
+
+bucket = "giggles-s3-bucket"  # <-- your bucket
+resp = s3.list_objects_v2(Bucket=bucket)
+for o in resp.get("Contents", []):
+    print(o["Key"])
