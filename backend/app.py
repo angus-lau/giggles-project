@@ -141,6 +141,24 @@ def unlike(video_id: str, user_id: str):
     sb.table("videos").update({"like_count": lc}).eq("id", video_id).execute()
     return {"ok": True, "like_count": lc}
 
+
+# All videos liked by a user (for bootstrapping liked state)
+@app.get("/users/{user_id}/likes")
+def user_likes(user_id: str, limit: int = 1000):
+    try:
+        rows = (
+            sb.table("likes")
+            .select("video_id")
+            .eq("user_id", user_id)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+        return {"video_ids": [r.get("video_id") for r in rows if r.get("video_id")]}
+    except Exception as e:
+        raise HTTPException(500, f"failed to load likes: {e}")
+
 # Comment
 @app.post("/videos/{video_id}/comments")
 def add_comment(video_id: str, user_id: str, text: str):

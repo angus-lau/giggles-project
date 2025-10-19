@@ -189,6 +189,8 @@ export default function Feed() {
   const [items, setItems] = useState<Item[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   const formatCount = (n: number) =>
     n < 1000 ? String(n) : `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}K`;
@@ -205,11 +207,32 @@ export default function Feed() {
         const seed: Record<string, number> = {};
         for (const it of mapped) seed[it.id] = it.likes ?? 0;
         setLikeCounts(seed);
+        // fetch liked video ids for this user to persist fill state
+        try {
+          const likedRes = await fetch(`${API_BASE}/users/${USER_ID}/likes`);
+          const likedJson = await likedRes.json();
+          const ids: string[] = likedJson?.video_ids ?? [];
+          setLikedIds(new Set(ids));
+        } catch {}
       } catch (e) {
         console.warn('Failed to load videos', e);
       }
     })();
   }, []);
+
+  // keep heart fill in sync when likedIds loads from server
+  useEffect(() => {
+    try {
+      likedIds.forEach((id) => {
+        const v = likeAnims.get(id);
+        if (v) v.setValue(1); // filled
+      });
+      // also clear any hearts no longer liked
+      likeAnims.forEach((v, id) => {
+        if (!likedIds.has(id)) v.setValue(0);
+      });
+    } catch {}
+  }, [likedIds]);
 
   // page excludes bottom tab bar; video sits below Dynamic Island
   const pageHeight = height; // full screen
@@ -220,8 +243,6 @@ export default function Feed() {
   const listRef = useRef<FlatList<Item>>(null);
 
   const [paused, setPaused] = useState(false);
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   const [openCommentsFor, setOpenCommentsFor] = useState<string | null>(null);
   const [commentsByVideo, setCommentsByVideo] = useState<Record<string, Comment[]>>({});
@@ -463,8 +484,9 @@ useEffect(() => {
 
         {/* like circle with 0.1s fill */}
         <Pressable
-          onPress={() => {
+          onPress={async () => {
             const toLiked = !liked;
+            // optimistic UI
             setLikedIds((prev) => {
               const next = new Set(prev);
               toLiked ? next.add(item.id) : next.delete(item.id);
@@ -479,6 +501,37 @@ useEffect(() => {
               duration: 100,
               useNativeDriver: false,
             }).start();
+
+            try {
+              if (toLiked) {
+                const r = await fetch(`${API_BASE}/videos/${item.id}/like?user_id=${encodeURIComponent(USER_ID)}`, { method: 'POST' });
+                const j = await r.json();
+                if (!r.ok) throw new Error(JSON.stringify(j));
+                setLikeCounts((prev) => ({ ...prev, [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0) }));
+              } else {
+                const r = await fetch(`${API_BASE}/videos/${item.id}/like?user_id=${encodeURIComponent(USER_ID)}`, { method: 'DELETE' });
+                const j = await r.json();
+                if (!r.ok) throw new Error(JSON.stringify(j));
+                setLikeCounts((prev) => ({ ...prev, [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0) }));
+              }
+            } catch (e) {
+              console.warn('Persist like failed', e);
+              // revert optimistic state on failure
+              setLikedIds((prev) => {
+                const next = new Set(prev);
+                toLiked ? next.delete(item.id) : next.add(item.id);
+                return next;
+              });
+              setLikeCounts((prev) => ({
+                ...prev,
+                [item.id]: Math.max(0, (prev[item.id] ?? 0) + (toLiked ? -1 : 1)),
+              }));
+              Animated.timing(av!, {
+                toValue: liked ? 1 : 0,
+                duration: 100,
+                useNativeDriver: false,
+              }).start();
+            }
           }}
           style={{ alignItems: "center", marginBottom: 14 }}
         >
