@@ -60,26 +60,56 @@ def list_videos(limit: int = 20, cursor: str | None = None):
     data = q.execute().data
     return {"videos": data}
 
-# Video detail + top comments
+# Video detail + top comments + # of likes and comments
 @app.get("/videos/{video_id}")
 def video_detail(video_id: str, comments_limit: int = 10):
-    v = sb.table("videos").select("*, users!videos_user_id_fkey(username)").eq("id", video_id).single().execute().data
-    cs = sb.table("comments").select("id, user_id, text, created_at").eq("video_id", video_id)\
-         .order("created_at", desc=True).limit(comments_limit).execute().data
+    # video info + uploader username
+    v = (
+        sb.table("videos")
+        .select("*, users!videos_user_id_fkey(username)")
+        .eq("id", video_id)
+        .single()
+        .execute()
+        .data
+    )
+
+    # counts
+    like_count = (
+        sb.table("likes").select("count()", count="exact").eq("video_id", video_id).execute().count
+    )
+    comment_count = (
+        sb.table("comments").select("count()", count="exact").eq("video_id", video_id).execute().count
+    )
+
+    # top comments
+    cs = (
+        sb.table("comments")
+        .select("id, user_id, text, created_at")
+        .eq("video_id", video_id)
+        .order("created_at", desc=True)
+        .limit(comments_limit)
+        .execute()
+        .data
+    )
+
+    v["like_count"] = like_count
+    v["comment_count"] = comment_count
     return {"video": v, "comments": cs}
 
 # Like / Unlike
 @app.post("/videos/{video_id}/like")
 def like(video_id: str, user_id: str):
     sb.table("likes").upsert({"video_id": video_id, "user_id": user_id}).execute()
-    # optional: return updated count
-    cnt = sb.rpc("count_likes_for_video", {"v_id": video_id}).execute().data if os.getenv("HAS_COUNT_FUNC") else None
+    # read the updated counter (assumes DB trigger maintains like_count)
+    vr = sb.table("videos").select("like_count").eq("id", video_id).single().execute().data
+    cnt = (vr or {}).get("like_count")
     return {"ok": True, "like_count": cnt}
 
 @app.delete("/videos/{video_id}/like")
 def unlike(video_id: str, user_id: str):
     sb.table("likes").delete().eq("video_id", video_id).eq("user_id", user_id).execute()
-    cnt = sb.rpc("count_likes_for_video", {"v_id": video_id}).execute().data if os.getenv("HAS_COUNT_FUNC") else None
+    vr = sb.table("videos").select("like_count").eq("id", video_id).single().execute().data
+    cnt = (vr or {}).get("like_count")
     return {"ok": True, "like_count": cnt}
 
 # Comment
