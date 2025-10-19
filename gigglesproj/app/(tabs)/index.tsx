@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, memo } from "react";
-
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   View,
   FlatList,
@@ -73,6 +73,7 @@ const toItem = (v: any): Item => ({
 const BottomNav = React.memo(
   function BottomNav() {
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     return (
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
         <View style={{ paddingBottom: insets.bottom }}>
@@ -99,31 +100,33 @@ const BottomNav = React.memo(
               // @ts-ignore
               shouldRasterizeIOS
             >
-              <View
+              <Pressable
+                onPress={() => router.push('/')}
                 style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: "white",
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: 'white',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
                 }}
               >
                 <Feather name="home" size={24} color="white" />
-              </View>
+              </Pressable>
 
-              <View
+              <Pressable
+                onPress={() => router.push('/explore')}
                 style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: "white",
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: 'white',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
                 }}
               >
                 <Feather name="grid" size={24} color="white" />
-              </View>
+              </Pressable>
 
               <View
                 style={{
@@ -144,35 +147,33 @@ const BottomNav = React.memo(
                 />
               </View>
 
-              <View
+              <Pressable
+                onPress={() => router.push('/messages')}
                 style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: "white",
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: 'white',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
                 }}
               >
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={24}
-                  color="white"
-                />
-              </View>
+                <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
+              </Pressable>
 
-              <View
+              <Pressable
+                onPress={() => router.push('/profile')}
                 style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: "white",
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: 'white',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
                 }}
               >
                 <Feather name="user" size={24} color="white" />
-              </View>
+              </Pressable>
             </View>
           </BlurView>
         </View>
@@ -241,6 +242,38 @@ export default function Feed() {
 
   const players = useRef(new Map<string, Video | null>());
   const listRef = useRef<FlatList<Item>>(null);
+
+  const { vid } = useLocalSearchParams<{ vid?: string }>();
+
+  useEffect(() => {
+    if (!vid) return;
+    if (!items || items.length === 0) return;
+    const idx = items.findIndex((it) => it.id === vid);
+    if (idx >= 0) {
+      setActiveId(items[idx].id);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({ index: idx, animated: false });
+      });
+    } else {
+      (async () => {
+        try {
+          const r = await fetch(`${API_BASE}/videos/${vid}`);
+          const j = await r.json();
+          const v = j?.video;
+          if (v && v.id) {
+            const item = toItem(v);
+            setItems((prev) => [item, ...prev.filter((p) => p.id !== item.id)]);
+            requestAnimationFrame(() => {
+              listRef.current?.scrollToIndex({ index: 0, animated: false });
+              setActiveId(item.id);
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to fetch deep link video', e);
+        }
+      })();
+    }
+  }, [vid, items]);
 
   const [paused, setPaused] = useState(false);
 
@@ -739,6 +772,11 @@ useEffect(() => {
           index: i,
         })}
         contentInsetAdjustmentBehavior="never"
+        onScrollToIndexFailed={({ index }) => {
+          setTimeout(() => {
+            listRef.current?.scrollToIndex({ index, animated: false });
+          }, 50);
+        }}
       />
 
       {/* Static bottom nav, never scrolls */}
