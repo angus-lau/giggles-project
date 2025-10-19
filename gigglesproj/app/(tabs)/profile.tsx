@@ -30,6 +30,58 @@ export default function Profile() {
   const [refreshing, setRefreshing] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
+// ---- lightweight profile cache shared via globalThis ----
+type ProfileBundle = {
+  stats: { username: string; avatar_url?: string; aura: number; posts: number; followers: number; following: number } | null;
+  videos: any[];
+  likes: any[];
+  ts: number;
+};
+
+const __pcache: Map<string, ProfileBundle> = (globalThis as any).__profileCache || new Map();
+(globalThis as any).__profileCache = __pcache;
+
+async function _fetchBundle(base: string, uid: string): Promise<ProfileBundle> {
+  const [statsRes, vidsRes, likesRes] = await Promise.all([
+    fetch(`${base}/users/${uid}`).then(r => r.ok ? r.json() : Promise.resolve({})).catch(() => ({})),
+    fetch(`${base}/users/${uid}/videos`).then(r => r.json()).catch(() => ({ videos: [] })),
+    fetch(`${base}/users/${uid}/likes`).then(r => r.json()).catch(() => ({ video_ids: [] })),
+  ]);
+  const stats = statsRes?.user ?? null;
+  const videos = vidsRes?.videos ?? [];
+  const ids: string[] = likesRes?.video_ids ?? [];
+  const likes = await Promise.all(
+    ids.slice(0, 12).map(async (id) => {
+      try { const vr = await fetch(`${base}/videos/${id}`); const vj = await vr.json(); return vj?.video; } catch { return null; }
+    })
+  ).then(rows => rows.filter(Boolean) as any[]);
+  return { stats, videos, likes, ts: Date.now() };
+}
+
+async function prefetchProfileGlobal(base: string, uid: string) {
+  try {
+    const b = await _fetchBundle(base, uid);
+    __pcache.set(uid, b);
+    // warm media
+    const urls = [
+      ...(b.videos || []).slice(0, 12).map((v: any) => v?.url).filter(Boolean),
+      ...(b.likes || []).slice(0, 12).map((v: any) => v?.url).filter(Boolean),
+    ];
+    try { await Promise.all(urls.map((u) => Asset.fromURI(u).downloadAsync())); } catch {}
+  } catch {}
+}
+
+// expose to other screens (e.g., index.tsx) without importing
+;(globalThis as any).__prefetchProfile = (uid: string) => prefetchProfileGlobal(API_BASE, uid);
+
+useEffect(() => {
+  const hit = __pcache.get(targetUserId);
+  if (hit) {
+    setProfileStats(hit.stats ?? null);
+    setVideos(hit.videos ?? []);
+    setLikedVideos(hit.likes ?? []);
+  }
+}, [targetUserId]);
   // load whether current user is following the target user
   useEffect(() => {
     if (isSelf) { setIsFollowing(false); return; }
@@ -69,6 +121,8 @@ export default function Profile() {
       setVideos(j?.videos ?? []);
       const urls = (j?.videos ?? []).slice(0, 12).map((v: any) => v.url).filter(Boolean);
       prefetchAssets(urls);
+      const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+__pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now() });
     } catch {
       setVideos([]);
     }
@@ -78,6 +132,7 @@ export default function Profile() {
     try {
       const r = await fetch(`${API_BASE}/users/${targetUserId}/likes`);
       const j = await r.json();
+      
       const ids: string[] = j?.video_ids ?? [];
       if (!ids.length) {
         setLikedVideos([]);
@@ -88,6 +143,8 @@ export default function Profile() {
           try {
             const vr = await fetch(`${API_BASE}/videos/${id}`);
             const vj = await vr.json();
+            const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+__pcache.set(targetUserId, { ...current, likes: rows.filter(Boolean) as any[], ts: Date.now() });
             return vj?.video;
           } catch {
             return null;
@@ -117,6 +174,9 @@ export default function Profile() {
       const data = await res.json();
       if (data?.user) {
         setProfileStats(data.user);
+        const current = __pcache.get(targetUserId) || { stats: null, videos: [], likes: [], ts: 0 };
+__pcache.set(targetUserId, { ...current, stats: data.user, ts: Date.now() });
+if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); } catch {} }
       } else {
         setProfileStats(null);
       }

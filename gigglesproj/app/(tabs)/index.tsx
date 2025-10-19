@@ -663,11 +663,14 @@ useEffect(() => {
           marginBottom: 6,
         }}
       >
-        <Pressable onPress={() => router.push(`/profile?uid=${encodeURIComponent(item.user_id)}&uname=${encodeURIComponent(item.user)}`)}>
-          <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
-            {item.user}
-          </Text>
-        </Pressable>
+        <Pressable
+  onPressIn={() => (globalThis as any).__prefetchProfile?.(item.user_id)}
+  onPress={() => router.push(`/profile?uid=${encodeURIComponent(item.user_id)}&uname=${encodeURIComponent(item.user)}`)}
+>
+  <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
+    {item.user}
+  </Text>
+</Pressable>
         <MaterialCommunityIcons
           name="check-decagram"
           size={16}
