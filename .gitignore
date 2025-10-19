@@ -1,0 +1,5 @@
+keys.env
+__pycache__/
+*.pyc
+*.pyo
+backend/__pycache__/app.cpython-313.pyc
