@@ -1,7 +1,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-import boto3, os, time
+import boto3, os, time, re
 from uuid import uuid4
 from dotenv import load_dotenv
 from supabase import create_client
@@ -184,6 +184,7 @@ def add_comment(video_id: str, user_id: str, text: str):
     except Exception as e:
         raise HTTPException(500, f"failed to insert comment: {e}")
 
+
 # User profile videos
 @app.get("/users/{user_id}/videos")
 def user_videos(user_id: str, limit: int = 20, cursor: str | None = None):
@@ -191,6 +192,104 @@ def user_videos(user_id: str, limit: int = 20, cursor: str | None = None):
     if cursor:
         q = q.lt("created_at", cursor)
     return {"videos": q.execute().data}
+
+
+# --- Image APIs ---
+# Upload image to S3 and insert row in Supabase `images`
+@app.post("/images/upload")
+async def upload_image(
+    user_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    img_id = str(uuid4())
+    key = f"images/{user_id}/{img_id}_{file.filename}"
+    try:
+        # ensure stream is at start
+        try:
+            file.file.seek(0)
+        except Exception:
+            pass
+        s3.upload_fileobj(file.file, BUCKET, key, ExtraArgs={"ContentType": file.content_type})
+        url = f"https://{BUCKET}.s3.amazonaws.com/{key}"
+        row = {
+            "id": img_id,
+            "user_id": user_id,
+            "storage_path": key,
+            "url": url,
+            "mime_type": file.content_type,
+        }
+        sb.table("images").insert(row).execute()
+        return {"image": row}
+    except Exception as e:
+        raise HTTPException(500, f"image upload failed: {e}")
+
+
+# List images for a user (latest first)
+@app.get("/images")
+def list_images(user_id: str, limit: int = 60, cursor: str | None = None):
+    try:
+        q = (
+            sb.table("images")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        if cursor:
+            q = q.lt("created_at", cursor)
+        data = q.execute().data or []
+        return {"images": data}
+    except Exception as e:
+        raise HTTPException(500, f"failed to list images: {e}")
+
+# Search images by keywords in storage_path or url
+@app.get("/images/search")
+def search_images(user_id: str, q: str, limit: int = 60):
+    try:
+        tokens = [t for t in re.split(r"[^A-Za-z0-9]+", q.lower()) if t]
+        if not tokens:
+            return {"images": []}
+        # Build OR filter like: storage_path.ilike.%foo%,url.ilike.%foo%,storage_path.ilike.%bar%,url.ilike.%bar%
+        or_clauses = []
+        for t in tokens:
+            or_clauses.append(f"storage_path.ilike.%{t}%")
+            or_clauses.append(f"url.ilike.%{t}%")
+        or_filter = ",".join(or_clauses)
+        qry = (
+            sb.table("images")
+            .select("*")
+            .eq("user_id", user_id)
+            .or_(or_filter)
+            .order("created_at", desc=True)
+            .limit(limit)
+        )
+        data = qry.execute().data or []
+        return {"images": data}
+    except Exception as e:
+        raise HTTPException(500, f"failed to search images: {e}")
+
+# Optional: delete image (soft delete or hard delete). Here hard delete + attempt S3 removal.
+@app.delete("/images/{image_id}")
+def delete_image(image_id: str, user_id: str):
+    try:
+        # fetch row to get storage_path
+        row = (
+            sb.table("images").select("id,storage_path,user_id").eq("id", image_id).single().execute().data
+        )
+        if not row or row.get("user_id") != user_id:
+            raise HTTPException(404, "image not found")
+        key = row.get("storage_path")
+        if key:
+            try:
+                s3.delete_object(Bucket=BUCKET, Key=key)
+            except Exception:
+                pass
+        sb.table("images").delete().eq("id", image_id).execute()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"failed to delete image: {e}")
 
 # User profile summary: basic fields + counts
 @app.get("/users/{user_id}")
