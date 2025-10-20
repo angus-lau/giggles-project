@@ -52,7 +52,7 @@ const USERNAME = "Angus";
 // - iOS Simulator:            http://127.0.0.1:8000
 // - Android Emulator:         http://10.0.2.2:8000
 // - Physical device on Wi‑Fi: http://<YOUR_LAN_IP>:8000  (e.g., http://192.168.1.23:8000)
-const API_BASE = "http://192.168.1.87:8000";
+const API_BASE = "http://192.168.1.91:8000";
 
 
 async function preload(source: AVPlaybackSource) {
@@ -130,7 +130,12 @@ const BottomNav = React.memo(
                 <Feather name="grid" size={24} color="white" />
               </Pressable>
 
-              <View
+              <Pressable
+                onPress={() => router.push('/create')}
+                accessibilityRole="button"
+                accessibilityLabel="Open create screen"
+                accessibilityHint="Opens the Create screen"
+                hitSlop={8}
                 style={{
                   width: 48,
                   height: 48,
@@ -147,7 +152,7 @@ const BottomNav = React.memo(
                   source={require("../../assets/images/gigglesLogo.png")}
                   style={{ width: 38, height: 38, resizeMode: "contain" }}
                 />
-              </View>
+              </Pressable>
 
               <Pressable
                 onPress={() => router.push('/messages')}
@@ -195,9 +200,48 @@ export default function Feed() {
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [followingUserIds, setFollowingUserIds] = useState<Set<string>>(new Set());
 
   const formatCount = (n: number) =>
     n < 1000 ? String(n) : `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}K`;
+
+  const toggleFollowUser = async (targetId: string) => {
+    if (!targetId) return;
+    const isFollowing = followingUserIds.has(targetId);
+    // optimistic toggle
+    setFollowingUserIds((prev) => {
+      const next = new Set(prev);
+      if (isFollowing) next.delete(targetId);
+      else next.add(targetId);
+      return next;
+    });
+    try {
+      const r = await fetch(
+        `${API_BASE}/users/${encodeURIComponent(targetId)}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
+        { method: isFollowing ? 'DELETE' : 'POST' }
+      );
+      const raw = await r.text();
+      if (!r.ok) {
+        // revert on failure
+        setFollowingUserIds((prev) => {
+          const next = new Set(prev);
+          if (isFollowing) next.add(targetId);
+          else next.delete(targetId);
+          return next;
+        });
+        console.warn('Follow toggle failed', r.status, raw);
+      }
+    } catch (e) {
+      // revert on error
+      setFollowingUserIds((prev) => {
+        const next = new Set(prev);
+        if (isFollowing) next.add(targetId);
+        else next.delete(targetId);
+        return next;
+      });
+      console.warn('Follow toggle error', e);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -487,6 +531,7 @@ useEffect(() => {
       av = new Animated.Value(liked ? 1 : 0);
       likeAnims.set(item.id, av);
     }
+    const isFollowing = followingUserIds.has(item.user_id);
 
     return (
       <View
@@ -510,21 +555,27 @@ useEffect(() => {
             }}
           >
             <Feather name="user" size={24} color="white" />
-          </View>
-          <View
-            style={{
-              position: "absolute",
-              bottom: -4,
-              right: 4,
-              width: 22,
-              height: 22,
-              borderRadius: 11,
-              backgroundColor: "#ff3355",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <AntDesign name="plus" size={14} color="white" />
+            {!isFollowing && item.user_id !== USER_ID ? (
+              <Pressable
+                onPress={() => toggleFollowUser(item.user_id)}
+                accessibilityRole="button"
+                accessibilityLabel="Follow user"
+                style={{
+                  position: "absolute",
+                  bottom: -6,
+                  left: '50%',
+                  transform: [{ translateX: -11 }],
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: "#ff3355",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <AntDesign name="plus" size={14} color="white" />
+              </Pressable>
+            ) : null}
           </View>
         </View>
 

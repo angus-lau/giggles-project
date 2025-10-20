@@ -10,7 +10,11 @@ import { useFocusEffect } from '@react-navigation/native';
 
 const USER_ID = 'd4705bec-b3ab-4d7c-aa28-a10470adcbd7';
 const USERNAME = 'Angus';
-const API_BASE = 'http://192.168.1.87:8000';
+const API_BASE = 'http://192.168.1.91:8000';
+
+// Global following cache shared across screens
+const __following: Set<string> = (globalThis as any).__followingIds || new Set();
+(globalThis as any).__followingIds = __following;
 
 const GRID_COLS = 3;
 const SCREEN_W = Dimensions.get('window').width;
@@ -85,15 +89,20 @@ useEffect(() => {
   // load whether current user is following the target user
   useEffect(() => {
     if (isSelf) { setIsFollowing(false); return; }
+    // Optimistic seed from global cache for instant UI
+    setIsFollowing(__following.has(targetUserId));
     (async () => {
       try {
         const r = await fetch(
           `${API_BASE}/users/${targetUserId}/is_following?follower_id=${encodeURIComponent(USER_ID)}`
         );
         const j = await r.json();
-        setIsFollowing(!!j?.is_following);
+        const on = !!j?.is_following;
+        setIsFollowing(on);
+        // sync global cache
+        if (on) __following.add(targetUserId); else __following.delete(targetUserId);
       } catch {
-        setIsFollowing(false);
+        // keep optimistic value; do not force false on error
       }
     })();
   }, [targetUserId, isSelf]);
@@ -287,6 +296,8 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
                 if (isSelf) return;
                 const next = !isFollowing;
                 setIsFollowing(next);
+                // sync global follow cache immediately
+                if (next) __following.add(targetUserId); else __following.delete(targetUserId);
                 // optimistic followers count update
                 setProfileStats((prev) =>
                   prev ? { ...prev, followers: Math.max(0, (prev.followers ?? 0) + (next ? 1 : -1)) } : prev
@@ -300,6 +311,7 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
                     const j = await r.json();
                     if (!r.ok) throw new Error(JSON.stringify(j));
                     setProfileStats((prev) => prev ? { ...prev, followers: Number(j?.followers ?? prev.followers ?? 0) } : prev);
+                    __following.add(targetUserId);
                   } else {
                     const r = await fetch(
                       `${API_BASE}/users/${targetUserId}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
@@ -308,10 +320,12 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
                     const j = await r.json();
                     if (!r.ok) throw new Error(JSON.stringify(j));
                     setProfileStats((prev) => prev ? { ...prev, followers: Number(j?.followers ?? prev.followers ?? 0) } : prev);
+                    __following.delete(targetUserId);
                   }
                 } catch (e) {
                   // revert on failure
                   setIsFollowing(!next);
+                  if (next) __following.delete(targetUserId); else __following.add(targetUserId);
                   setProfileStats((prev) =>
                     prev ? { ...prev, followers: Math.max(0, (prev.followers ?? 0) + (next ? -1 : 1)) } : prev
                   );
@@ -553,9 +567,12 @@ const BottomNav = React.memo(function BottomNav() {
             <Pressable onPress={() => router.push('/explore')} style={{ alignItems: 'center', justifyContent: 'center' }}>
               <Feather name="grid" size={24} color="white" />
             </Pressable>
-            <View style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable
+              onPress={() => router.push('/create')}
+              style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            >
               <Image source={require('../../assets/images/gigglesLogo.png')} style={{ width: 38, height: 38, resizeMode: 'contain' }} />
-            </View>
+            </Pressable>
             <Pressable onPress={() => router.push('/messages')} style={{ alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
             </Pressable>
