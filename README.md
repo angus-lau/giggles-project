@@ -1,5 +1,5 @@
 
-# Project Title
+# Giggles MVP Project
 
 TikTok style mobile app built with **Expo (React Native)** on the front end with FastAPI on the backend. The backend connects to **Supabase** to handle user, video, likes, comments, follows saves and images endpoint. All the videos and images are stored on **AWS S3**. Made to demonstrate skills to Giggles.
 
