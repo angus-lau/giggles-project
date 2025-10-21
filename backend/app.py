@@ -1,6 +1,5 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
 import boto3, os, time, re
 from uuid import uuid4
 from dotenv import load_dotenv
@@ -8,10 +7,9 @@ from supabase import create_client
 
 app = FastAPI()
 
-# Allow requests from mobile/web during development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for dev; tighten in prod
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,10 +27,9 @@ BUCKET = os.getenv("BUCKET_NAME", "giggles-s3-bucket")
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # service key for server
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Upload to S3, then insert video row in Supabase
 @app.post("/uploads")
 async def upload(
     user_id: str = Form(...),
@@ -44,13 +41,12 @@ async def upload(
     try:
         s3.upload_fileobj(file.file, BUCKET, key, ExtraArgs={"ContentType": file.content_type})
         url = f"https://{BUCKET}.s3.amazonaws.com/{key}"
-        # videos(id, user_id, s3_key, url)
         sb.table("videos").insert({"id": vid, "user_id": user_id, "s3_key": key, "url": url, "caption": caption}).execute()
         return {"id": vid, "key": key, "url": url}
     except Exception as e:
         raise HTTPException(500, str(e))
 
-# Feed (latest videos with counters; persisted like_count/comment_count)
+# Feed
 @app.get("/videos")
 def list_videos(limit: int = 20, cursor: str | None = None):
     q = sb.table("videos").select("*, users!videos_user_id_fkey(username)")
@@ -60,7 +56,7 @@ def list_videos(limit: int = 20, cursor: str | None = None):
     data = q.execute().data
     return {"videos": data}
 
-# Video detail + top comments + # of likes and comments
+# Video detail
 @app.get("/videos/{video_id}")
 def video_detail(video_id: str, comments_limit: int = 10):
     # video + uploader username; return JSON 404 if not found
@@ -79,7 +75,6 @@ def video_detail(video_id: str, comments_limit: int = 10):
     if not v:
         raise HTTPException(404, "video not found")
 
-    # counts: prefer persisted, else recompute
     like_count = int(v.get("like_count") or 0)
     comment_count = int(v.get("comment_count") or 0)
     if like_count == 0:
@@ -98,8 +93,6 @@ def video_detail(video_id: str, comments_limit: int = 10):
             )
         except Exception:
             comment_count = 0
-
-    # comments list; tolerate missing table
     cs = []
     try:
         cs = (
@@ -123,7 +116,6 @@ def video_detail(video_id: str, comments_limit: int = 10):
 @app.post("/videos/{video_id}/like")
 def like(video_id: str, user_id: str):
     sb.table("likes").upsert({"video_id": video_id, "user_id": user_id}).execute()
-    # recompute and persist like_count on videos
     lc = (
         sb.table("likes").select("*", count="exact").eq("video_id", video_id).execute().count
         or 0
@@ -142,7 +134,7 @@ def unlike(video_id: str, user_id: str):
     return {"ok": True, "like_count": lc}
 
 
-# All videos liked by a user (for bootstrapping liked state)
+# All videos liked by a user
 @app.get("/users/{user_id}/likes")
 def user_likes(user_id: str, limit: int = 1000):
     try:
@@ -174,7 +166,6 @@ def add_comment(video_id: str, user_id: str, text: str):
         )
         data = getattr(res, 'data', None) or []
         row = data[0] if data else {"video_id": video_id, "user_id": user_id, "text": text, "username": username}
-        # recompute and persist comment_count on videos
         cc = (
             sb.table("comments").select("*", count="exact").eq("video_id", video_id).execute().count
             or 0
@@ -193,9 +184,7 @@ def user_videos(user_id: str, limit: int = 20, cursor: str | None = None):
         q = q.lt("created_at", cursor)
     return {"videos": q.execute().data}
 
-
-# --- Image APIs ---
-# Upload image to S3 and insert row in Supabase `images`
+# Upload image to S3
 @app.post("/images/upload")
 async def upload_image(
     user_id: str = Form(...),
@@ -204,7 +193,6 @@ async def upload_image(
     img_id = str(uuid4())
     key = f"images/{user_id}/{img_id}_{file.filename}"
     try:
-        # ensure stream is at start
         try:
             file.file.seek(0)
         except Exception:
@@ -224,7 +212,7 @@ async def upload_image(
         raise HTTPException(500, f"image upload failed: {e}")
 
 
-# List images for a user (latest first)
+# List images for a user
 @app.get("/images")
 def list_images(user_id: str, limit: int = 60, cursor: str | None = None):
     try:
@@ -242,14 +230,14 @@ def list_images(user_id: str, limit: int = 60, cursor: str | None = None):
     except Exception as e:
         raise HTTPException(500, f"failed to list images: {e}")
 
-# Search images by keywords in storage_path or url
+# Search images by keywords
 @app.get("/images/search")
 def search_images(user_id: str, q: str, limit: int = 60):
     try:
         tokens = [t for t in re.split(r"[^A-Za-z0-9]+", q.lower()) if t]
         if not tokens:
             return {"images": []}
-        # Build OR filter like: storage_path.ilike.%foo%,url.ilike.%foo%,storage_path.ilike.%bar%,url.ilike.%bar%
+        
         or_clauses = []
         for t in tokens:
             or_clauses.append(f"storage_path.ilike.%{t}%")
@@ -268,11 +256,9 @@ def search_images(user_id: str, q: str, limit: int = 60):
     except Exception as e:
         raise HTTPException(500, f"failed to search images: {e}")
 
-# Optional: delete image (soft delete or hard delete). Here hard delete + attempt S3 removal.
 @app.delete("/images/{image_id}")
 def delete_image(image_id: str, user_id: str):
     try:
-        # fetch row to get storage_path
         row = (
             sb.table("images").select("id,storage_path,user_id").eq("id", image_id).single().execute().data
         )
@@ -291,21 +277,19 @@ def delete_image(image_id: str, user_id: str):
     except Exception as e:
         raise HTTPException(500, f"failed to delete image: {e}")
 
-# User profile summary: basic fields + counts
+# User profile summary
 @app.get("/users/{user_id}")
 def user_profile(user_id: str):
-    # base user info
     try:
         u = (
             sb.table("users")
-            .select("id, username, avatar_url, aura")  # aura optional; will be None if column absent
+            .select("id, username, avatar_url, aura") 
             .eq("id", user_id)
             .single()
             .execute()
             .data
         )
     except Exception:
-        # fallback without aura column
         try:
             u = (
                 sb.table("users")
@@ -321,7 +305,6 @@ def user_profile(user_id: str):
     if not u:
         raise HTTPException(404, "user not found")
 
-    # posts count
     try:
         posts = (
             sb.table("videos").select("*", count="exact").eq("user_id", user_id).execute().count
@@ -330,7 +313,7 @@ def user_profile(user_id: str):
     except Exception:
         posts = 0
 
-    # followers/following counts (tolerate missing table 'follows')
+    # followers/following counts
     followers = 0
     following = 0
     try:
@@ -360,7 +343,6 @@ def user_profile(user_id: str):
         }
     }
 
-# --- Follow APIs ---
 @app.get("/users/{target_id}/is_following")
 def is_following(target_id: str, follower_id: str):
     try:
@@ -382,7 +364,6 @@ def is_following(target_id: str, follower_id: str):
 def follow_user(target_id: str, follower_id: str):
     if target_id == follower_id:
         raise HTTPException(400, "cannot follow self")
-    # upsert to avoid duplicates when tapping quickly
     try:
         res = (
             sb.table("follows")
@@ -392,7 +373,6 @@ def follow_user(target_id: str, follower_id: str):
         print("UPSERT FOLLOW RESP", getattr(res, "data", None), getattr(res, "status_code", None))
     except Exception as e:
         print("UPSERT FOLLOW ERROR", repr(e))
-        # try plain insert once
         try:
             res2 = sb.table("follows").insert({"follower_id": follower_id, "followed_id": target_id}).execute()
             print("INSERT FOLLOW RESP", getattr(res2, "data", None), getattr(res2, "status_code", None))
@@ -400,7 +380,6 @@ def follow_user(target_id: str, follower_id: str):
             print("INSERT FOLLOW ERROR", repr(e2))
             raise HTTPException(500, f"failed to write follows: {e2}")
 
-    # retry the count a few times to avoid read-after-write race
     followers = 0
     last_err = None
     for _ in range(3):

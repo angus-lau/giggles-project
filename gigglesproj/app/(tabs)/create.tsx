@@ -1,14 +1,32 @@
-// app/(tabs)/create.tsx
 import React, { memo, useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, Image, Pressable, useWindowDimensions, FlatList } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Image,
+  Pressable,
+  useWindowDimensions,
+  FlatList,
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from 'expo-router';
+import { useRouter } from "expo-router";
 
 const API_BASE = "http://192.168.1.91:8000";
 const USER_ID = "d4705bec-b3ab-4d7c-aa28-a10470adcbd7";
-type GridImage = { id: string; url: string; w?: number; h?: number; created_at?: string };
+type GridImage = {
+  id: string;
+  url: string;
+  w?: number;
+  h?: number;
+  created_at?: string;
+};
 
 const BottomNav = memo(function BottomNav() {
   const insets = useSafeAreaInsets();
@@ -39,21 +57,35 @@ const BottomNav = memo(function BottomNav() {
             shouldRasterizeIOS
           >
             <Pressable
-              onPress={() => router.push('/')}
-              style={{ alignItems: 'center', justifyContent: 'center', shadowColor: 'white', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}
+              onPress={() => router.push("/")}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "white",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.7,
+                shadowRadius: 10,
+              }}
             >
               <Feather name="home" size={24} color="white" />
             </Pressable>
 
             <Pressable
-              onPress={() => router.push('/explore')}
-              style={{ alignItems: 'center', justifyContent: 'center', shadowColor: 'white', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}
+              onPress={() => router.push("/explore")}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "white",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.7,
+                shadowRadius: 10,
+              }}
             >
               <Feather name="grid" size={24} color="white" />
             </Pressable>
 
             <Pressable
-              onPress={() => router.push('/create')}
+              onPress={() => router.push("/create")}
               accessibilityRole="button"
               accessibilityLabel="Open create screen"
               accessibilityHint="Opens the Create screen"
@@ -77,15 +109,33 @@ const BottomNav = memo(function BottomNav() {
             </Pressable>
 
             <Pressable
-              onPress={() => router.push('/messages')}
-              style={{ alignItems: 'center', justifyContent: 'center', shadowColor: 'white', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}
+              onPress={() => router.push("/messages")}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "white",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.7,
+                shadowRadius: 10,
+              }}
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={24}
+                color="white"
+              />
             </Pressable>
 
             <Pressable
-              onPress={() => router.push('/profile')}
-              style={{ alignItems: 'center', justifyContent: 'center', shadowColor: 'white', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 }}
+              onPress={() => router.push("/profile")}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "white",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.7,
+                shadowRadius: 10,
+              }}
             >
               <Feather name="user" size={24} color="white" />
             </Pressable>
@@ -109,17 +159,33 @@ export default function CreateScreen() {
   const handleSearch = async () => {
     const q = queryText.trim();
     if (!q) {
-      // reload latest if query cleared
       setLoadingImages(true);
       try {
-        const r = await fetch(`${API_BASE}/images?limit=60&user_id=${encodeURIComponent(USER_ID)}`);
+        const r = await fetch(
+          `${API_BASE}/images?limit=60&user_id=${encodeURIComponent(USER_ID)}`
+        );
         const txt = await r.text();
-        let j: any = null; try { j = txt ? JSON.parse(txt) : null; } catch {}
-        const list = Array.isArray(j?.images) ? j.images : (Array.isArray(j) ? j : []);
-        const rows: GridImage[] = list.map((it: any) => ({ id: it.id || it.uuid || String(it.url), url: it.url, w: it.w, h: it.h, created_at: it.created_at })).filter((it: GridImage) => !!it.url);
+        let j: any = null;
+        try {
+          j = txt ? JSON.parse(txt) : null;
+        } catch {}
+        const list = Array.isArray(j?.images)
+          ? j.images
+          : Array.isArray(j)
+          ? j
+          : [];
+        const rows: GridImage[] = list
+          .map((it: any) => ({
+            id: it.id || it.uuid || String(it.url),
+            url: it.url,
+            w: it.w,
+            h: it.h,
+            created_at: it.created_at,
+          }))
+          .filter((it: GridImage) => !!it.url);
         setImages(rows);
       } catch (e) {
-        console.warn('Failed to reload images', e);
+        console.warn("Failed to reload images", e);
         setImages([]);
       } finally {
         setLoadingImages(false);
@@ -128,19 +194,38 @@ export default function CreateScreen() {
     }
     setLoadingImages(true);
     try {
-      const r = await fetch(`${API_BASE}/images/search?user_id=${encodeURIComponent(USER_ID)}&q=${encodeURIComponent(q)}`);
+      const r = await fetch(
+        `${API_BASE}/images/search?user_id=${encodeURIComponent(
+          USER_ID
+        )}&q=${encodeURIComponent(q)}`
+      );
       const txt = await r.text();
       if (!r.ok) {
-        console.warn('search non-200', r.status, txt);
+        console.warn("search non-200", r.status, txt);
         setImages([]);
         return;
       }
-      let j: any = null; try { j = txt ? JSON.parse(txt) : null; } catch {}
-      const list = Array.isArray(j?.images) ? j.images : (Array.isArray(j) ? j : []);
-      const rows: GridImage[] = list.map((it: any) => ({ id: it.id || it.uuid || String(it.url), url: it.url, w: it.w, h: it.h, created_at: it.created_at })).filter((it: GridImage) => !!it.url);
+      let j: any = null;
+      try {
+        j = txt ? JSON.parse(txt) : null;
+      } catch {}
+      const list = Array.isArray(j?.images)
+        ? j.images
+        : Array.isArray(j)
+        ? j
+        : [];
+      const rows: GridImage[] = list
+        .map((it: any) => ({
+          id: it.id || it.uuid || String(it.url),
+          url: it.url,
+          w: it.w,
+          h: it.h,
+          created_at: it.created_at,
+        }))
+        .filter((it: GridImage) => !!it.url);
       setImages(rows);
     } catch (e) {
-      console.warn('search failed', e);
+      console.warn("search failed", e);
       setImages([]);
     } finally {
       setLoadingImages(false);
@@ -152,68 +237,86 @@ export default function CreateScreen() {
     (async () => {
       setLoadingImages(true);
       try {
-        const r = await fetch(`${API_BASE}/images?limit=60&user_id=${encodeURIComponent(USER_ID)}`);
+        const r = await fetch(
+          `${API_BASE}/images?limit=60&user_id=${encodeURIComponent(USER_ID)}`
+        );
         const txt = await r.text();
         let j: any = null;
-        try { j = txt ? JSON.parse(txt) : null; } catch {}
-        const rows: GridImage[] = (j?.images ?? j ?? []).map((it: any) => ({
-          id: it.id || it.uuid || String(it.url),
-          url: it.url,
-          w: it.w,
-          h: it.h,
-          created_at: it.created_at,
-        })).filter((it: GridImage) => !!it.url);
+        try {
+          j = txt ? JSON.parse(txt) : null;
+        } catch {}
+        const rows: GridImage[] = (j?.images ?? j ?? [])
+          .map((it: any) => ({
+            id: it.id || it.uuid || String(it.url),
+            url: it.url,
+            w: it.w,
+            h: it.h,
+            created_at: it.created_at,
+          }))
+          .filter((it: GridImage) => !!it.url);
         if (alive) setImages(rows);
       } catch (e) {
-        console.warn('Failed to load images', e);
+        console.warn("Failed to load images", e);
       } finally {
         if (alive) setLoadingImages(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const uploadToServer = async (uri: string) => {
     try {
       const form = new FormData();
-      form.append('file', {
+      form.append("file", {
         uri,
         name: `upload.jpg`,
-        type: 'image/jpeg',
+        type: "image/jpeg",
       } as any);
-      form.append('user_id', USER_ID);
+      form.append("user_id", USER_ID);
       const resp = await fetch(`${API_BASE}/images/upload`, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json' },
+        method: "POST",
+        headers: { Accept: "application/json" },
         body: form,
       });
       const txt = await resp.text();
       let j: any = null;
-      try { j = txt ? JSON.parse(txt) : null; } catch {}
+      try {
+        j = txt ? JSON.parse(txt) : null;
+      } catch {}
       if (!resp.ok) throw new Error(j ? JSON.stringify(j) : txt);
       const row: GridImage = j?.image || j;
-      if (row?.url) setImages((prev) => [{ id: row.id || row.url, url: row.url, w: row.w, h: row.h, created_at: row.created_at }, ...prev]);
+      if (row?.url)
+        setImages((prev) => [
+          {
+            id: row.id || row.url,
+            url: row.url,
+            w: row.w,
+            h: row.h,
+            created_at: row.created_at,
+          },
+          ...prev,
+        ]);
     } catch (e) {
-      console.warn('Upload failed', e);
+      console.warn("Upload failed", e);
     }
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={()=>{}}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
           <Feather name="camera" size={22} />
         </TouchableOpacity>
 
         <Text style={styles.title}>Create</Text>
 
-        <TouchableOpacity style={styles.iconBtn} onPress={() => { /* TODO: hook up */ }}>
+        <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
           <Ionicons name="settings-outline" size={22} />
         </TouchableOpacity>
       </View>
 
-      {/* Search / caption input (kept identical to original if you had it) */}
       <View style={styles.inputWrap}>
         <Ionicons name="rocket-outline" size={18} />
         <TextInput
@@ -232,9 +335,10 @@ export default function CreateScreen() {
         </Pressable>
       </View>
 
-      {/* Optional loading hint */}
-      {loadingImages ? <Text style={{ color: '#999', marginTop: 8 }}>Loading images…</Text> : null}
-      {/* 3-column grid like profile widths */}
+      {loadingImages ? (
+        <Text style={{ color: "#999", marginTop: 8 }}>Loading images…</Text>
+      ) : null}
+
       <View style={{ marginTop: 12 }}>
         <FlatList
           data={images}
@@ -246,23 +350,43 @@ export default function CreateScreen() {
           renderItem={({ item }) => (
             <Pressable
               onPress={() => setPreviewSrc(item.url)}
-              style={{ width: TILE_SIZE, height: TILE_SIZE, backgroundColor: "#1c1c1e", borderRadius: 6, overflow: 'hidden' }}
+              style={{
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+                backgroundColor: "#1c1c1e",
+                borderRadius: 6,
+                overflow: "hidden",
+              }}
             >
-              <Image source={{ uri: item.url }} style={{ width: TILE_SIZE, height: TILE_SIZE, resizeMode: 'cover' }} />
+              <Image
+                source={{ uri: item.url }}
+                style={{
+                  width: TILE_SIZE,
+                  height: TILE_SIZE,
+                  resizeMode: "cover",
+                }}
+              />
             </Pressable>
           )}
         />
       </View>
 
-      {/* Primary actions row, centered above bottom nav */}
       <View pointerEvents="box-none" style={{ flex: 1 }}>
         <View style={[styles.fabRow, { bottom: insets.bottom + 120 }]}>
-          <TouchableOpacity style={[styles.pill, styles.pillPrimary]} onPress={() => { /* TODO */ }}>
+          <TouchableOpacity
+            style={[styles.pill, styles.pillPrimary]}
+            onPress={() => {}}
+          >
             <Ionicons name="add-circle-outline" size={18} color="#000000ff" />
-            <Text style={[styles.pillText, styles.pillTextPrimary]}>New Post</Text>
+            <Text style={[styles.pillText, styles.pillTextPrimary]}>
+              New Post
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.pill, styles.pillRight]} onPress={() => { /* TODO */ }}>
+          <TouchableOpacity
+            style={[styles.pill, styles.pillRight]}
+            onPress={() => {}}
+          >
             <Feather name="image" size={18} />
             <Text style={styles.pillText}>Upload Image</Text>
           </TouchableOpacity>
@@ -277,16 +401,25 @@ export default function CreateScreen() {
           accessibilityLabel="Close preview"
           style={{
             ...(StyleSheet.absoluteFillObject as any),
-            backgroundColor: 'rgba(0,0,0,0.9)',
-            alignItems: 'center',
-            justifyContent: 'center',
+            backgroundColor: "rgba(0,0,0,0.9)",
+            alignItems: "center",
+            justifyContent: "center",
             zIndex: 999,
           }}
         >
-          <Pressable onPress={(e) => { (e as any)?.stopPropagation?.(); }}>
+          <Pressable
+            onPress={(e) => {
+              (e as any)?.stopPropagation?.();
+            }}
+          >
             <Image
               source={{ uri: previewSrc }}
-              style={{ width: Math.min(width * 0.92, 520), height: Math.min(width * 0.92, 520), resizeMode: 'contain', borderRadius: 12 }}
+              style={{
+                width: Math.min(width * 0.92, 520),
+                height: Math.min(width * 0.92, 520),
+                resizeMode: "contain",
+                borderRadius: 12,
+              }}
             />
           </Pressable>
         </Pressable>
@@ -298,9 +431,8 @@ export default function CreateScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#000000ff", // match original
+    backgroundColor: "#000000ff",
     paddingHorizontal: 16,
-    // paddingTop removed; handled by SafeAreaView edges
   },
   header: {
     height: 48,
@@ -351,15 +483,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFEFEF",
   },
   pillRight: {
-    marginLeft: 40, // pushes only the right pill further right
+    marginLeft: 40,
   },
   fabRow: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 20,
   },
   pillPrimary: {

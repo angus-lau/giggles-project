@@ -1,119 +1,166 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Image, Dimensions, RefreshControl } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { Asset } from 'expo-asset';
-import { Video, ResizeMode } from 'expo-av';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  Image,
+  Dimensions,
+  RefreshControl,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { Asset } from "expo-asset";
+import { Video, ResizeMode } from "expo-av";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 
-const USER_ID = 'd4705bec-b3ab-4d7c-aa28-a10470adcbd7';
-const USERNAME = 'Angus';
-const API_BASE = 'http://192.168.1.91:8000';
+const USER_ID = "d4705bec-b3ab-4d7c-aa28-a10470adcbd7";
+const USERNAME = "Angus";
+const API_BASE = "http://192.168.1.91:8000";
 
-// Global following cache shared across screens
-const __following: Set<string> = (globalThis as any).__followingIds || new Set();
+const __following: Set<string> =
+  (globalThis as any).__followingIds || new Set();
 (globalThis as any).__followingIds = __following;
 
 const GRID_COLS = 3;
-const SCREEN_W = Dimensions.get('window').width;
+const SCREEN_W = Dimensions.get("window").width;
 const GAP = 4;
 const CELL = Math.floor((SCREEN_W - 24 - GAP * (GRID_COLS - 1)) / GRID_COLS);
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { uid, uname } = useLocalSearchParams<{ uid?: string; uname?: string }>();
-  const targetUserId = uid || USER_ID; // default to me
+  const { uid, uname } = useLocalSearchParams<{
+    uid?: string;
+    uname?: string;
+  }>();
+  const targetUserId = uid || USER_ID;
   const isSelf = targetUserId === USER_ID;
   const displayName = uname || USERNAME;
-  const [activeTab, setActiveTab] = useState<'grid' | 'circle'>('grid');
+  const [activeTab, setActiveTab] = useState<"grid" | "circle">("grid");
   const [videos, setVideos] = useState<any[]>([]);
   const [likedVideos, setLikedVideos] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
 
-// ---- lightweight profile cache shared via globalThis ----
-type ProfileBundle = {
-  stats: { username: string; avatar_url?: string; aura: number; posts: number; followers: number; following: number } | null;
-  videos: any[];
-  likes: any[];
-  ts: number;
-};
+  type ProfileBundle = {
+    stats: {
+      username: string;
+      avatar_url?: string;
+      aura: number;
+      posts: number;
+      followers: number;
+      following: number;
+    } | null;
+    videos: any[];
+    likes: any[];
+    ts: number;
+  };
 
-const __pcache: Map<string, ProfileBundle> = (globalThis as any).__profileCache || new Map();
-(globalThis as any).__profileCache = __pcache;
+  const __pcache: Map<string, ProfileBundle> =
+    (globalThis as any).__profileCache || new Map();
+  (globalThis as any).__profileCache = __pcache;
 
-async function _fetchBundle(base: string, uid: string): Promise<ProfileBundle> {
-  const [statsRes, vidsRes, likesRes] = await Promise.all([
-    fetch(`${base}/users/${uid}`).then(r => r.ok ? r.json() : Promise.resolve({})).catch(() => ({})),
-    fetch(`${base}/users/${uid}/videos`).then(r => r.json()).catch(() => ({ videos: [] })),
-    fetch(`${base}/users/${uid}/likes`).then(r => r.json()).catch(() => ({ video_ids: [] })),
-  ]);
-  const stats = statsRes?.user ?? null;
-  const videos = vidsRes?.videos ?? [];
-  const ids: string[] = likesRes?.video_ids ?? [];
-  const likes = await Promise.all(
-    ids.slice(0, 12).map(async (id) => {
-      try { const vr = await fetch(`${base}/videos/${id}`); const vj = await vr.json(); return vj?.video; } catch { return null; }
-    })
-  ).then(rows => rows.filter(Boolean) as any[]);
-  return { stats, videos, likes, ts: Date.now() };
-}
-
-async function prefetchProfileGlobal(base: string, uid: string) {
-  try {
-    const b = await _fetchBundle(base, uid);
-    __pcache.set(uid, b);
-    // warm media
-    const urls = [
-      ...(b.videos || []).slice(0, 12).map((v: any) => v?.url).filter(Boolean),
-      ...(b.likes || []).slice(0, 12).map((v: any) => v?.url).filter(Boolean),
-    ];
-    try { await Promise.all(urls.map((u) => Asset.fromURI(u).downloadAsync())); } catch {}
-  } catch {}
-}
-
-// expose to other screens (e.g., index.tsx) without importing
-;(globalThis as any).__prefetchProfile = (uid: string) => prefetchProfileGlobal(API_BASE, uid);
-
-useEffect(() => {
-  const hit = __pcache.get(targetUserId);
-  if (hit) {
-    setProfileStats(hit.stats ?? null);
-    setVideos(hit.videos ?? []);
-    setLikedVideos(hit.likes ?? []);
+  async function _fetchBundle(
+    base: string,
+    uid: string
+  ): Promise<ProfileBundle> {
+    const [statsRes, vidsRes, likesRes] = await Promise.all([
+      fetch(`${base}/users/${uid}`)
+        .then((r) => (r.ok ? r.json() : Promise.resolve({})))
+        .catch(() => ({})),
+      fetch(`${base}/users/${uid}/videos`)
+        .then((r) => r.json())
+        .catch(() => ({ videos: [] })),
+      fetch(`${base}/users/${uid}/likes`)
+        .then((r) => r.json())
+        .catch(() => ({ video_ids: [] })),
+    ]);
+    const stats = statsRes?.user ?? null;
+    const videos = vidsRes?.videos ?? [];
+    const ids: string[] = likesRes?.video_ids ?? [];
+    const likes = await Promise.all(
+      ids.slice(0, 12).map(async (id) => {
+        try {
+          const vr = await fetch(`${base}/videos/${id}`);
+          const vj = await vr.json();
+          return vj?.video;
+        } catch {
+          return null;
+        }
+      })
+    ).then((rows) => rows.filter(Boolean) as any[]);
+    return { stats, videos, likes, ts: Date.now() };
   }
-}, [targetUserId]);
-  // load whether current user is following the target user
+
+  async function prefetchProfileGlobal(base: string, uid: string) {
+    try {
+      const b = await _fetchBundle(base, uid);
+      __pcache.set(uid, b);
+
+      const urls = [
+        ...(b.videos || [])
+          .slice(0, 12)
+          .map((v: any) => v?.url)
+          .filter(Boolean),
+        ...(b.likes || [])
+          .slice(0, 12)
+          .map((v: any) => v?.url)
+          .filter(Boolean),
+      ];
+      try {
+        await Promise.all(urls.map((u) => Asset.fromURI(u).downloadAsync()));
+      } catch {}
+    } catch {}
+  }
+
+  (globalThis as any).__prefetchProfile = (uid: string) =>
+    prefetchProfileGlobal(API_BASE, uid);
+
   useEffect(() => {
-    if (isSelf) { setIsFollowing(false); return; }
-    // Optimistic seed from global cache for instant UI
+    const hit = __pcache.get(targetUserId);
+    if (hit) {
+      setProfileStats(hit.stats ?? null);
+      setVideos(hit.videos ?? []);
+      setLikedVideos(hit.likes ?? []);
+    }
+  }, [targetUserId]);
+
+  useEffect(() => {
+    if (isSelf) {
+      setIsFollowing(false);
+      return;
+    }
+
     setIsFollowing(__following.has(targetUserId));
     (async () => {
       try {
         const r = await fetch(
-          `${API_BASE}/users/${targetUserId}/is_following?follower_id=${encodeURIComponent(USER_ID)}`
+          `${API_BASE}/users/${targetUserId}/is_following?follower_id=${encodeURIComponent(
+            USER_ID
+          )}`
         );
         const j = await r.json();
         const on = !!j?.is_following;
         setIsFollowing(on);
-        // sync global cache
-        if (on) __following.add(targetUserId); else __following.delete(targetUserId);
-      } catch {
-        // keep optimistic value; do not force false on error
-      }
+
+        if (on) __following.add(targetUserId);
+        else __following.delete(targetUserId);
+      } catch {}
     })();
   }, [targetUserId, isSelf]);
 
   const prefetchAssets = useCallback(async (urls: string[]) => {
     try {
-      await Promise.all(urls.filter(Boolean).map((u) => Asset.fromURI(u).downloadAsync()));
+      await Promise.all(
+        urls.filter(Boolean).map((u) => Asset.fromURI(u).downloadAsync())
+      );
     } catch {}
   }, []);
 
-  // Added state for user profile stats
   const [profileStats, setProfileStats] = useState<{
     username: string;
     avatar_url?: string;
@@ -128,10 +175,22 @@ useEffect(() => {
       const r = await fetch(`${API_BASE}/users/${targetUserId}/videos`);
       const j = await r.json();
       setVideos(j?.videos ?? []);
-      const urls = (j?.videos ?? []).slice(0, 12).map((v: any) => v.url).filter(Boolean);
+      const urls = (j?.videos ?? [])
+        .slice(0, 12)
+        .map((v: any) => v.url)
+        .filter(Boolean);
       prefetchAssets(urls);
-      const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
-__pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now() });
+      const current = __pcache.get(targetUserId) || {
+        stats: profileStats,
+        videos: [],
+        likes: [],
+        ts: 0,
+      };
+      __pcache.set(targetUserId, {
+        ...current,
+        videos: j?.videos ?? [],
+        ts: Date.now(),
+      });
     } catch {
       setVideos([]);
     }
@@ -144,8 +203,13 @@ __pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now()
       const ids: string[] = j?.video_ids ?? [];
       if (!ids.length) {
         setLikedVideos([]);
-        // update cache with empty list
-        const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+
+        const current = __pcache.get(targetUserId) || {
+          stats: profileStats,
+          videos: [],
+          likes: [],
+          ts: 0,
+        };
         __pcache.set(targetUserId, { ...current, likes: [], ts: Date.now() });
         return;
       }
@@ -165,23 +229,30 @@ __pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now()
       const list = rows.filter(Boolean) as any[];
       setLikedVideos(list);
 
-      // prefetch media for faster thumbs
-      const urls = list.slice(0, 12).map((v: any) => v.url).filter(Boolean);
+      const urls = list
+        .slice(0, 12)
+        .map((v: any) => v.url)
+        .filter(Boolean);
       prefetchAssets(urls);
 
-      // write-through cache AFTER rows exist
-      const current = __pcache.get(targetUserId) || { stats: profileStats, videos: [], likes: [], ts: 0 };
+      const current = __pcache.get(targetUserId) || {
+        stats: profileStats,
+        videos: [],
+        likes: [],
+        ts: 0,
+      };
       __pcache.set(targetUserId, { ...current, likes: list, ts: Date.now() });
     } catch {
       setLikedVideos([]);
     }
   }, [targetUserId, prefetchAssets]);
   useEffect(() => {
-    if (activeTab === 'grid') prefetchAssets(videos.slice(0, 12).map((v: any) => v.url));
-    if (activeTab === 'circle') prefetchAssets(likedVideos.slice(0, 12).map((v: any) => v.url));
+    if (activeTab === "grid")
+      prefetchAssets(videos.slice(0, 12).map((v: any) => v.url));
+    if (activeTab === "circle")
+      prefetchAssets(likedVideos.slice(0, 12).map((v: any) => v.url));
   }, [activeTab, videos, likedVideos, prefetchAssets]);
 
-  // New function to load user profile stats
   const loadProfileStats = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/users/${targetUserId}`);
@@ -192,9 +263,22 @@ __pcache.set(targetUserId, { ...current, videos: j?.videos ?? [], ts: Date.now()
       const data = await res.json();
       if (data?.user) {
         setProfileStats(data.user);
-        const current = __pcache.get(targetUserId) || { stats: null, videos: [], likes: [], ts: 0 };
-__pcache.set(targetUserId, { ...current, stats: data.user, ts: Date.now() });
-if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); } catch {} }
+        const current = __pcache.get(targetUserId) || {
+          stats: null,
+          videos: [],
+          likes: [],
+          ts: 0,
+        };
+        __pcache.set(targetUserId, {
+          ...current,
+          stats: data.user,
+          ts: Date.now(),
+        });
+        if (data.user?.avatar_url) {
+          try {
+            await Image.prefetch(data.user.avatar_url);
+          } catch {}
+        }
       } else {
         setProfileStats(null);
       }
@@ -203,53 +287,93 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
     }
   }, [targetUserId]);
 
-  useEffect(() => { loadMine(); }, [loadMine]);
-  useEffect(() => { loadLiked(); }, [loadLiked]);
-  useEffect(() => { loadProfileStats(); }, [loadProfileStats]);
+  useEffect(() => {
+    loadMine();
+  }, [loadMine]);
+  useEffect(() => {
+    loadLiked();
+  }, [loadLiked]);
+  useEffect(() => {
+    loadProfileStats();
+  }, [loadProfileStats]);
 
-  useFocusEffect(useCallback(() => { loadMine(); }, [loadMine]));
-  useFocusEffect(useCallback(() => { loadLiked(); }, [loadLiked]));
-  useFocusEffect(useCallback(() => { loadProfileStats(); }, [loadProfileStats]));
+  useFocusEffect(
+    useCallback(() => {
+      loadMine();
+    }, [loadMine])
+  );
+  useFocusEffect(
+    useCallback(() => {
+      loadLiked();
+    }, [loadLiked])
+  );
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileStats();
+    }, [loadProfileStats])
+  );
 
   useEffect(() => {
-    if (activeTab === 'circle') loadLiked();
-    if (activeTab === 'grid') loadMine();
+    if (activeTab === "circle") loadLiked();
+    if (activeTab === "grid") loadMine();
   }, [activeTab, loadLiked, loadMine]);
 
   const gridData = useMemo(() => videos, [videos]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
       <View
         style={{
           paddingTop: insets.top + 8,
           paddingHorizontal: 12,
           paddingBottom: 8,
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
-        <Text style={{ color: 'white', fontSize: 16 }}>@{profileStats?.username || displayName || 'user'}</Text>
+        <Text style={{ color: "white", fontSize: 16 }}>
+          @{profileStats?.username || displayName || "user"}
+        </Text>
         <Feather name="menu" color="white" size={22} />
       </View>
 
-      {/* Stats */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, marginTop: 6 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 18,
+          marginTop: 6,
+        }}
+      >
         <View style={{ flex: 1 }}>
-          <Text style={{ color: 'white', fontSize: 16, marginBottom: 6 }}>User</Text>
-          <View style={{ flexDirection: 'row', gap: 24 }}>
+          <Text style={{ color: "white", fontSize: 16, marginBottom: 6 }}>
+            User
+          </Text>
+          <View style={{ flexDirection: "row", gap: 24 }}>
             {[
-              { label: 'aura', value: profileStats?.aura ?? 0 },
-              { label: 'followers', value: profileStats?.followers ?? 0 },
-              { label: 'posts', value: profileStats?.posts ?? videos.length },
+              { label: "aura", value: profileStats?.aura ?? 0 },
+              { label: "followers", value: profileStats?.followers ?? 0 },
+              { label: "posts", value: profileStats?.posts ?? videos.length },
             ].map((s) => (
               <View key={s.label}>
-                <Text style={{ color: 'white', fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
+                <Text
+                  style={{
+                    color: "white",
+                    fontSize: 18,
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
                   {s.value}
                 </Text>
-                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'center' }}>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.7)",
+                    fontSize: 12,
+                    textAlign: "center",
+                  }}
+                >
                   {s.label}
                 </Text>
               </View>
@@ -261,9 +385,9 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
             width: 64,
             height: 64,
             borderRadius: 32,
-            backgroundColor: 'rgba(255,255,255,0.18)',
-            alignItems: 'center',
-            justifyContent: 'center',
+            backgroundColor: "rgba(255,255,255,0.18)",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           {profileStats?.avatar_url ? (
@@ -276,9 +400,15 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
           )}
         </View>
       </View>
-
-      {/* Actions */}
-      <View style={{ paddingHorizontal: 18, marginTop: 12, flexDirection: 'row', gap: 10 }}>
+      
+      <View
+        style={{
+          paddingHorizontal: 18,
+          marginTop: 12,
+          flexDirection: "row",
+          gap: 10,
+        }}
+      >
         {isSelf ? (
           <>
             <Pressable style={styles.btnDark}>
@@ -291,53 +421,99 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
         ) : (
           <>
             <Pressable
-              style={[styles.btnDark, isFollowing && { backgroundColor: 'rgba(255,255,255,0.24)' }]}
+              style={[
+                styles.btnDark,
+                isFollowing && { backgroundColor: "rgba(255,255,255,0.24)" },
+              ]}
               onPress={async () => {
                 if (isSelf) return;
                 const next = !isFollowing;
                 setIsFollowing(next);
-                // sync global follow cache immediately
-                if (next) __following.add(targetUserId); else __following.delete(targetUserId);
-                // optimistic followers count update
+
+                if (next) __following.add(targetUserId);
+                else __following.delete(targetUserId);
+
                 setProfileStats((prev) =>
-                  prev ? { ...prev, followers: Math.max(0, (prev.followers ?? 0) + (next ? 1 : -1)) } : prev
+                  prev
+                    ? {
+                        ...prev,
+                        followers: Math.max(
+                          0,
+                          (prev.followers ?? 0) + (next ? 1 : -1)
+                        ),
+                      }
+                    : prev
                 );
                 try {
                   if (next) {
                     const r = await fetch(
-                      `${API_BASE}/users/${targetUserId}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
-                      { method: 'POST' }
+                      `${API_BASE}/users/${targetUserId}/follow?follower_id=${encodeURIComponent(
+                        USER_ID
+                      )}`,
+                      { method: "POST" }
                     );
                     const j = await r.json();
                     if (!r.ok) throw new Error(JSON.stringify(j));
-                    setProfileStats((prev) => prev ? { ...prev, followers: Number(j?.followers ?? prev.followers ?? 0) } : prev);
+                    setProfileStats((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            followers: Number(
+                              j?.followers ?? prev.followers ?? 0
+                            ),
+                          }
+                        : prev
+                    );
                     __following.add(targetUserId);
                   } else {
                     const r = await fetch(
-                      `${API_BASE}/users/${targetUserId}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
-                      { method: 'DELETE' }
+                      `${API_BASE}/users/${targetUserId}/follow?follower_id=${encodeURIComponent(
+                        USER_ID
+                      )}`,
+                      { method: "DELETE" }
                     );
                     const j = await r.json();
                     if (!r.ok) throw new Error(JSON.stringify(j));
-                    setProfileStats((prev) => prev ? { ...prev, followers: Number(j?.followers ?? prev.followers ?? 0) } : prev);
+                    setProfileStats((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            followers: Number(
+                              j?.followers ?? prev.followers ?? 0
+                            ),
+                          }
+                        : prev
+                    );
                     __following.delete(targetUserId);
                   }
                 } catch (e) {
-                  // revert on failure
                   setIsFollowing(!next);
-                  if (next) __following.delete(targetUserId); else __following.add(targetUserId);
+                  if (next) __following.delete(targetUserId);
+                  else __following.add(targetUserId);
                   setProfileStats((prev) =>
-                    prev ? { ...prev, followers: Math.max(0, (prev.followers ?? 0) + (next ? -1 : 1)) } : prev
+                    prev
+                      ? {
+                          ...prev,
+                          followers: Math.max(
+                            0,
+                            (prev.followers ?? 0) + (next ? -1 : 1)
+                          ),
+                        }
+                      : prev
                   );
-                  console.warn('Follow toggle failed', e);
+                  console.warn("Follow toggle failed", e);
                 }
               }}
             >
-              <Text style={styles.btnText}>{isFollowing ? 'Followed' : 'Follow'}</Text>
+              <Text style={styles.btnText}>
+                {isFollowing ? "Followed" : "Follow"}
+              </Text>
             </Pressable>
             <Pressable
               style={styles.btnDark}
-              onPress={() => router.push(`/messages?to=${encodeURIComponent(targetUserId)}`)}
+              onPress={() =>
+                router.push(`/messages?to=${encodeURIComponent(targetUserId)}`)
+              }
             >
               <Text style={styles.btnText}>Message</Text>
             </Pressable>
@@ -345,43 +521,49 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
         )}
       </View>
 
-      {/* Tabs */}
-      <View style={{ marginTop: 28, alignItems: 'center' }}>
+      <View style={{ marginTop: 28, alignItems: "center" }}>
         <View
           style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
             gap: 150,
           }}
         >
-          <Pressable onPress={() => setActiveTab('grid')} style={{ paddingVertical: 6 }}>
+          <Pressable
+            onPress={() => setActiveTab("grid")}
+            style={{ paddingVertical: 6 }}
+          >
             <MaterialCommunityIcons
               name="grid"
               size={38}
-              color={activeTab === 'grid' ? 'white' : 'rgba(255,255,255,0.6)'}
+              color={activeTab === "grid" ? "white" : "rgba(255,255,255,0.6)"}
             />
           </Pressable>
-          <Pressable onPress={() => setActiveTab('circle')} style={{ paddingVertical: 6 }}>
+          <Pressable
+            onPress={() => setActiveTab("circle")}
+            style={{ paddingVertical: 6 }}
+          >
             <Ionicons
               name="ellipse"
               size={32}
-              color={activeTab === 'circle' ? '#f48fb1' : 'rgba(255,255,255,0.6)'}
+              color={
+                activeTab === "circle" ? "#f48fb1" : "rgba(255,255,255,0.6)"
+              }
             />
           </Pressable>
         </View>
         <View
           style={{
             height: 1,
-            backgroundColor: 'rgba(255,255,255,0.15)',
-            width: '88%',
+            backgroundColor: "rgba(255,255,255,0.15)",
+            width: "88%",
             marginTop: 20,
           }}
         />
       </View>
 
-      {/* Uploaded videos */}
-      {activeTab === 'grid' ? (
+      {activeTab === "grid" ? (
         <FlatList
           contentContainerStyle={{
             paddingHorizontal: 12,
@@ -391,7 +573,7 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
           data={gridData}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing && activeTab === 'grid'}
+              refreshing={refreshing && activeTab === "grid"}
               onRefresh={async () => {
                 setRefreshing(true);
                 try {
@@ -408,19 +590,21 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
           columnWrapperStyle={{ gap: GAP, marginBottom: GAP }}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => router.push(`/?vid=${encodeURIComponent(item.id)}`)}
+              onPress={() =>
+                router.push(`/?vid=${encodeURIComponent(item.id)}`)
+              }
               style={{
                 width: CELL,
                 height: CELL,
                 borderRadius: 8,
-                overflow: 'hidden',
-                backgroundColor: 'rgba(255,255,255,0.1)',
+                overflow: "hidden",
+                backgroundColor: "rgba(255,255,255,0.1)",
               }}
             >
               {item?.url ? (
                 <Video
                   source={{ uri: item.url }}
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: "100%", height: "100%" }}
                   resizeMode={ResizeMode.COVER}
                   isMuted
                   shouldPlay={false}
@@ -432,7 +616,13 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={{ color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 28 }}>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.7)",
+                textAlign: "center",
+                marginTop: 28,
+              }}
+            >
               No posts yet
             </Text>
           }
@@ -447,7 +637,7 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
           data={likedVideos}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing && activeTab === 'circle'}
+              refreshing={refreshing && activeTab === "circle"}
               onRefresh={async () => {
                 setRefreshing(true);
                 try {
@@ -464,19 +654,21 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
           columnWrapperStyle={{ gap: GAP, marginBottom: GAP }}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => router.push(`/?vid=${encodeURIComponent(item.id)}`)}
+              onPress={() =>
+                router.push(`/?vid=${encodeURIComponent(item.id)}`)
+              }
               style={{
                 width: CELL,
                 height: CELL,
                 borderRadius: 8,
-                overflow: 'hidden',
-                backgroundColor: 'rgba(255,255,255,0.1)',
+                overflow: "hidden",
+                backgroundColor: "rgba(255,255,255,0.1)",
               }}
             >
               {item?.url ? (
                 <Video
                   source={{ uri: item.url }}
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: "100%", height: "100%" }}
                   resizeMode={ResizeMode.COVER}
                   isMuted
                   shouldPlay={false}
@@ -488,32 +680,39 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={{ color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 28 }}>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.7)",
+                textAlign: "center",
+                marginTop: 28,
+              }}
+            >
               No liked videos yet
             </Text>
           }
         />
       )}
 
-      {/* Share a giggle */}
-      {isSelf && activeTab === 'grid' && gridData.length === 0 ? (
+      {isSelf && activeTab === "grid" && gridData.length === 0 ? (
         <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
           <Text
             style={{
-              color: 'rgba(255,255,255,0.85)',
-              textAlign: 'center',
+              color: "rgba(255,255,255,0.85)",
+              textAlign: "center",
               marginBottom: 10,
             }}
           >
             Share a giggle
           </Text>
-          <Pressable style={styles.uploadBtn} onPress={() => router.push('/upload')}>
-            <Text style={{ color: 'white', fontWeight: '700' }}>Upload</Text>
+          <Pressable
+            style={styles.uploadBtn}
+            onPress={() => router.push("/upload")}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>Upload</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {/* Spacer */}
       <View style={{ height: insets.bottom + 84 }} />
       <BottomNav />
     </View>
@@ -523,16 +722,16 @@ if (data.user?.avatar_url) { try { await Image.prefetch(data.user.avatar_url); }
 const styles = StyleSheet.create({
   btnDark: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: "rgba(255,255,255,0.12)",
     paddingVertical: 10,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
-  btnText: { color: 'white', fontWeight: '600', fontSize: 12 },
+  btnText: { color: "white", fontWeight: "600", fontSize: 12 },
   uploadBtn: {
-    backgroundColor: '#E4572E',
+    backgroundColor: "#E4572E",
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 12,
   },
 });
@@ -541,7 +740,7 @@ const BottomNav = React.memo(function BottomNav() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   return (
-    <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
       <View style={{ paddingBottom: insets.bottom }}>
         <BlurView
           intensity={40}
@@ -550,33 +749,58 @@ const BottomNav = React.memo(function BottomNav() {
             marginHorizontal: 12,
             marginBottom: 10,
             borderRadius: 20,
-            overflow: 'hidden',
+            overflow: "hidden",
           }}
         >
           <View
             style={{
               height: 64,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-around',
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-around",
             }}
           >
-            <Pressable onPress={() => router.push('/')} style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable
+              onPress={() => router.push("/")}
+              style={{ alignItems: "center", justifyContent: "center" }}
+            >
               <Feather name="home" size={24} color="white" />
             </Pressable>
-            <Pressable onPress={() => router.push('/explore')} style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable
+              onPress={() => router.push("/explore")}
+              style={{ alignItems: "center", justifyContent: "center" }}
+            >
               <Feather name="grid" size={24} color="white" />
             </Pressable>
             <Pressable
-              onPress={() => router.push('/create')}
-              style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+              onPress={() => router.push("/create")}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <Image source={require('../../assets/images/gigglesLogo.png')} style={{ width: 38, height: 38, resizeMode: 'contain' }} />
+              <Image
+                source={require("../../assets/images/gigglesLogo.png")}
+                style={{ width: 38, height: 38, resizeMode: "contain" }}
+              />
             </Pressable>
-            <Pressable onPress={() => router.push('/messages')} style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
+            <Pressable
+              onPress={() => router.push("/messages")}
+              style={{ alignItems: "center", justifyContent: "center" }}
+            >
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={24}
+                color="white"
+              />
             </Pressable>
-            <Pressable onPress={() => router.push('/profile')} style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable
+              onPress={() => router.push("/profile")}
+              style={{ alignItems: "center", justifyContent: "center" }}
+            >
               <Feather name="user" size={24} color="white" />
             </Pressable>
           </View>

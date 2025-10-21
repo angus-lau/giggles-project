@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, memo } from "react";
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from "expo-router";
 import {
   View,
   FlatList,
@@ -34,26 +34,27 @@ import {
 import { FontAwesome } from "@expo/vector-icons";
 type Item = {
   id: string;
-  url: string;           // S3 URL
-  user: string;          // display name or username
-  user_id: string;       // users.id UUID
+  url: string;
+  user: string;
+  user_id: string;
   caption: string;
   likes: number;
   comments: number;
 };
 
-type Comment = { id: string; user_id: string; text: string; created_at?: string; username?: string; users?: { username?: string } };
+type Comment = {
+  id: string;
+  user_id: string;
+  text: string;
+  created_at?: string;
+  username?: string;
+  users?: { username?: string };
+};
 
-// temporary until auth
-const USER_ID = "d4705bec-b3ab-4d7c-aa28-a10470adcbd7"; // users.id UUID
+const USER_ID = "d4705bec-b3ab-4d7c-aa28-a10470adcbd7";
 const USERNAME = "Angus";
 
-// Use the correct host per environment:
-// - iOS Simulator:            http://127.0.0.1:8000
-// - Android Emulator:         http://10.0.2.2:8000
-// - Physical device on Wi‑Fi: http://<YOUR_LAN_IP>:8000  (e.g., http://192.168.1.23:8000)
 const API_BASE = "http://192.168.1.91:8000";
-
 
 async function preload(source: AVPlaybackSource) {
   if (typeof source === "number")
@@ -63,11 +64,11 @@ async function preload(source: AVPlaybackSource) {
 }
 
 const toItem = (v: any): Item => ({
-  id: v?.id ?? '',
-  url: v?.url ?? '',
-  user: (v && (v.users?.username || v.user_id?.slice(0, 6))) || 'user',
-  user_id: v?.user_id ?? '',
-  caption: v?.caption ?? '',
+  id: v?.id ?? "",
+  url: v?.url ?? "",
+  user: (v && (v.users?.username || v.user_id?.slice(0, 6))) || "user",
+  user_id: v?.user_id ?? "",
+  caption: v?.caption ?? "",
   likes: Number(v?.like_count ?? 0) || 0,
   comments: Number(v?.comment_count ?? 0) || 0,
 });
@@ -96,18 +97,17 @@ const BottomNav = React.memo(
                 alignItems: "center",
                 justifyContent: "space-around",
               }}
-              // reduce compositor flicker
               // @ts-ignore
               renderToHardwareTextureAndroid
               // @ts-ignore
               shouldRasterizeIOS
             >
               <Pressable
-                onPress={() => router.push('/')}
+                onPress={() => router.push("/")}
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: 'white',
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
@@ -117,11 +117,11 @@ const BottomNav = React.memo(
               </Pressable>
 
               <Pressable
-                onPress={() => router.push('/explore')}
+                onPress={() => router.push("/explore")}
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: 'white',
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
@@ -131,7 +131,7 @@ const BottomNav = React.memo(
               </Pressable>
 
               <Pressable
-                onPress={() => router.push('/create')}
+                onPress={() => router.push("/create")}
                 accessibilityRole="button"
                 accessibilityLabel="Open create screen"
                 accessibilityHint="Opens the Create screen"
@@ -155,25 +155,29 @@ const BottomNav = React.memo(
               </Pressable>
 
               <Pressable
-                onPress={() => router.push('/messages')}
+                onPress={() => router.push("/messages")}
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: 'white',
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
                 }}
               >
-                <Ionicons name="chatbubble-ellipses-outline" size={24} color="white" />
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={24}
+                  color="white"
+                />
               </Pressable>
 
               <Pressable
-                onPress={() => router.push('/profile')}
+                onPress={() => router.push("/profile")}
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: 'white',
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "white",
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.7,
                   shadowRadius: 10,
@@ -188,7 +192,7 @@ const BottomNav = React.memo(
     );
   },
   () => true
-); // never re-render
+);
 export default function Feed() {
   const router = useRouter();
   const { height, width } = useWindowDimensions();
@@ -200,7 +204,9 @@ export default function Feed() {
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
-  const [followingUserIds, setFollowingUserIds] = useState<Set<string>>(new Set());
+  const [followingUserIds, setFollowingUserIds] = useState<Set<string>>(
+    new Set()
+  );
 
   const formatCount = (n: number) =>
     n < 1000 ? String(n) : `${(n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0)}K`;
@@ -208,7 +214,6 @@ export default function Feed() {
   const toggleFollowUser = async (targetId: string) => {
     if (!targetId) return;
     const isFollowing = followingUserIds.has(targetId);
-    // optimistic toggle
     setFollowingUserIds((prev) => {
       const next = new Set(prev);
       if (isFollowing) next.delete(targetId);
@@ -217,29 +222,29 @@ export default function Feed() {
     });
     try {
       const r = await fetch(
-        `${API_BASE}/users/${encodeURIComponent(targetId)}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
-        { method: isFollowing ? 'DELETE' : 'POST' }
+        `${API_BASE}/users/${encodeURIComponent(
+          targetId
+        )}/follow?follower_id=${encodeURIComponent(USER_ID)}`,
+        { method: isFollowing ? "DELETE" : "POST" }
       );
       const raw = await r.text();
       if (!r.ok) {
-        // revert on failure
         setFollowingUserIds((prev) => {
           const next = new Set(prev);
           if (isFollowing) next.add(targetId);
           else next.delete(targetId);
           return next;
         });
-        console.warn('Follow toggle failed', r.status, raw);
+        console.warn("Follow toggle failed", r.status, raw);
       }
     } catch (e) {
-      // revert on error
       setFollowingUserIds((prev) => {
         const next = new Set(prev);
         if (isFollowing) next.add(targetId);
         else next.delete(targetId);
         return next;
       });
-      console.warn('Follow toggle error', e);
+      console.warn("Follow toggle error", e);
     }
   };
 
@@ -251,11 +256,11 @@ export default function Feed() {
         const mapped: Item[] = (data.videos ?? []).map(toItem);
         setItems(mapped);
         if (mapped.length) setActiveId(mapped[0].id);
-        // seed like counts from server values
+
         const seed: Record<string, number> = {};
         for (const it of mapped) seed[it.id] = it.likes ?? 0;
         setLikeCounts(seed);
-        // fetch liked video ids for this user to persist fill state
+
         try {
           const likedRes = await fetch(`${API_BASE}/users/${USER_ID}/likes`);
           const likedJson = await likedRes.json();
@@ -263,28 +268,26 @@ export default function Feed() {
           setLikedIds(new Set(ids));
         } catch {}
       } catch (e) {
-        console.warn('Failed to load videos', e);
+        console.warn("Failed to load videos", e);
       }
     })();
   }, []);
 
-  // keep heart fill in sync when likedIds loads from server
   useEffect(() => {
     try {
       likedIds.forEach((id) => {
         const v = likeAnims.get(id);
-        if (v) v.setValue(1); // filled
+        if (v) v.setValue(1);
       });
-      // also clear any hearts no longer liked
+
       likeAnims.forEach((v, id) => {
         if (!likedIds.has(id)) v.setValue(0);
       });
     } catch {}
   }, [likedIds]);
 
-  // page excludes bottom tab bar; video sits below Dynamic Island
-  const pageHeight = height; // full screen
-  const videoTop = insets.top; // below Dynamic Island
+  const pageHeight = height;
+  const videoTop = insets.top;
   const videoHeight = pageHeight - insets.top;
 
   const players = useRef(new Map<string, Video | null>());
@@ -316,7 +319,7 @@ export default function Feed() {
             });
           }
         } catch (e) {
-          console.warn('Failed to fetch deep link video', e);
+          console.warn("Failed to fetch deep link video", e);
         }
       })();
     }
@@ -325,48 +328,53 @@ export default function Feed() {
   const [paused, setPaused] = useState(false);
 
   const [openCommentsFor, setOpenCommentsFor] = useState<string | null>(null);
-  const [commentsByVideo, setCommentsByVideo] = useState<Record<string, Comment[]>>({});
+  const [commentsByVideo, setCommentsByVideo] = useState<
+    Record<string, Comment[]>
+  >({});
   const [commentInput, setCommentInput] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
 
   const SHEET_H = Math.min(height * 0.85, 620);
-  const MIN_Y = height - SHEET_H; // fully open
-  const MAX_Y = height; // closed
+  const MIN_Y = height - SHEET_H;
+  const MAX_Y = height;
   const sheetY = useRef(new Animated.Value(MAX_Y)).current;
   const inputBarY = useRef(new Animated.Value(0)).current;
   const [kbVisible, setKbVisible] = useState(false);
 
-useEffect(() => {
-  const show = Keyboard.addListener(
-    Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-    (e) => {
-      const h = e.endCoordinates?.height ?? 0;
-      const adjusted = Math.max(0, h - (insets.bottom || 0));
-      setKbVisible(true);
-      Animated.timing(inputBarY, {
-        toValue: -adjusted,
-        duration: Platform.OS === "ios" ? Math.min(e.duration ?? 180, 180) : 160,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    }
-  );
-  const hide = Keyboard.addListener(
-    Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-    () => {
-      setKbVisible(false);
-      Animated.timing(inputBarY, {
-        toValue: 0,
-        duration: 140,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    }
-  );
-  return () => { show.remove(); hide.remove(); };
-}, [inputBarY, insets.bottom]);
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        const h = e.endCoordinates?.height ?? 0;
+        const adjusted = Math.max(0, h - (insets.bottom || 0));
+        setKbVisible(true);
+        Animated.timing(inputBarY, {
+          toValue: -adjusted,
+          duration:
+            Platform.OS === "ios" ? Math.min(e.duration ?? 180, 180) : 160,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKbVisible(false);
+        Animated.timing(inputBarY, {
+          toValue: 0,
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [inputBarY, insets.bottom]);
 
-  // video area = space above the comments sheet (updates while dragging)
   const videoAreaH = sheetY.interpolate({
     inputRange: [MIN_Y, MAX_Y], //
     outputRange: [height - SHEET_H, height],
@@ -381,31 +389,37 @@ useEffect(() => {
       try {
         data = txt ? JSON.parse(txt) : null;
       } catch (parseErr) {
-        console.warn('Non-JSON response for /videos/{id}:', txt?.slice(0, 200));
+        console.warn("Non-JSON response for /videos/{id}:", txt?.slice(0, 200));
         data = null;
       }
 
       if (!res.ok) {
-        console.warn('Server error', res.status, data || txt);
+        console.warn("Server error", res.status, data || txt);
         setCommentsByVideo((prev) => ({ ...prev, [id]: prev[id] ?? [] }));
       } else {
-        const serverComments: Comment[] = (data?.comments ?? []).map((c: any) => ({
-          id: c.id,
-          user_id: c.user_id,
-          text: c.text,
-          created_at: c.created_at,
-          username: c.username,
-          users: c.users,
-        }));
+        const serverComments: Comment[] = (data?.comments ?? []).map(
+          (c: any) => ({
+            id: c.id,
+            user_id: c.user_id,
+            text: c.text,
+            created_at: c.created_at,
+            username: c.username,
+            users: c.users,
+          })
+        );
         setCommentsByVideo((prev) => ({ ...prev, [id]: serverComments }));
       }
     } catch (e) {
-      console.warn('Failed to load comments', e);
+      console.warn("Failed to load comments", e);
       setCommentsByVideo((prev) => ({ ...prev, [id]: prev[id] ?? [] }));
     }
     setOpenCommentsFor(id);
     sheetY.setValue(MAX_Y);
-    Animated.timing(sheetY, { toValue: MIN_Y, duration: 220, useNativeDriver: false }).start();
+    Animated.timing(sheetY, {
+      toValue: MIN_Y,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
   };
 
   const closeComments = () => {
@@ -463,8 +477,12 @@ useEffect(() => {
       try {
         await Promise.all(targets.map((u) => preload({ uri: u })));
       } catch {}
-      // pause neighbors to keep decoder free
-      for (const id of [items[i - 1]?.id, items[i + 1]?.id, items[i + 2]?.id].filter(Boolean) as string[]) {
+
+      for (const id of [
+        items[i - 1]?.id,
+        items[i + 1]?.id,
+        items[i + 2]?.id,
+      ].filter(Boolean) as string[]) {
         try {
           await players.current.get(id)?.setStatusAsync({ shouldPlay: false });
         } catch {}
@@ -474,9 +492,14 @@ useEffect(() => {
 
   useEffect(() => {
     if (!items.length) return;
-    const first = items.slice(0, 6).map((it) => it.url).filter(Boolean);
+    const first = items
+      .slice(0, 6)
+      .map((it) => it.url)
+      .filter(Boolean);
     (async () => {
-      try { await Promise.all(first.map((u) => preload({ uri: u }))); } catch {}
+      try {
+        await Promise.all(first.map((u) => preload({ uri: u })));
+      } catch {}
     })();
   }, [items.length]);
 
@@ -542,7 +565,6 @@ useEffect(() => {
           alignItems: "center",
         }}
       >
-        {/* profile + plus */}
         <View style={{ alignItems: "center", marginBottom: 18 }}>
           <View
             style={{
@@ -563,7 +585,7 @@ useEffect(() => {
                 style={{
                   position: "absolute",
                   bottom: -6,
-                  left: '50%',
+                  left: "50%",
                   transform: [{ translateX: -11 }],
                   width: 22,
                   height: 22,
@@ -579,7 +601,6 @@ useEffect(() => {
           </View>
         </View>
 
-        {/* like circle with 0.1s fill */}
         <Pressable
           onPress={async () => {
             const toLiked = !liked;
@@ -601,19 +622,35 @@ useEffect(() => {
 
             try {
               if (toLiked) {
-                const r = await fetch(`${API_BASE}/videos/${item.id}/like?user_id=${encodeURIComponent(USER_ID)}`, { method: 'POST' });
+                const r = await fetch(
+                  `${API_BASE}/videos/${
+                    item.id
+                  }/like?user_id=${encodeURIComponent(USER_ID)}`,
+                  { method: "POST" }
+                );
                 const j = await r.json();
                 if (!r.ok) throw new Error(JSON.stringify(j));
-                setLikeCounts((prev) => ({ ...prev, [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0) }));
+                setLikeCounts((prev) => ({
+                  ...prev,
+                  [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0),
+                }));
               } else {
-                const r = await fetch(`${API_BASE}/videos/${item.id}/like?user_id=${encodeURIComponent(USER_ID)}`, { method: 'DELETE' });
+                const r = await fetch(
+                  `${API_BASE}/videos/${
+                    item.id
+                  }/like?user_id=${encodeURIComponent(USER_ID)}`,
+                  { method: "DELETE" }
+                );
                 const j = await r.json();
                 if (!r.ok) throw new Error(JSON.stringify(j));
-                setLikeCounts((prev) => ({ ...prev, [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0) }));
+                setLikeCounts((prev) => ({
+                  ...prev,
+                  [item.id]: Number(j?.like_count ?? prev[item.id] ?? 0),
+                }));
               }
             } catch (e) {
-              console.warn('Persist like failed', e);
-              // revert optimistic state on failure
+              console.warn("Persist like failed", e);
+
               setLikedIds((prev) => {
                 const next = new Set(prev);
                 toLiked ? next.delete(item.id) : next.add(item.id);
@@ -621,7 +658,10 @@ useEffect(() => {
               });
               setLikeCounts((prev) => ({
                 ...prev,
-                [item.id]: Math.max(0, (prev[item.id] ?? 0) + (toLiked ? -1 : 1)),
+                [item.id]: Math.max(
+                  0,
+                  (prev[item.id] ?? 0) + (toLiked ? -1 : 1)
+                ),
               }));
               Animated.timing(av!, {
                 toValue: liked ? 1 : 0,
@@ -659,7 +699,6 @@ useEffect(() => {
           </Text>
         </Pressable>
 
-        {/* comments */}
         <Pressable
           onPress={() => openComments(item.id)}
           style={{ alignItems: "center", marginBottom: 14 }}
@@ -670,7 +709,6 @@ useEffect(() => {
           </Text>
         </Pressable>
 
-        {/* bookmark */}
         <Pressable
           onPress={() => {
             setBookmarkedIds((prev) => {
@@ -683,13 +721,12 @@ useEffect(() => {
           style={{ alignItems: "center", marginBottom: 14 }}
         >
           <FontAwesome
-            name={bookmarkedIds.has(item.id) ? "bookmark" : "bookmark-o"} // filled vs outline
+            name={bookmarkedIds.has(item.id) ? "bookmark" : "bookmark-o"}
             size={32}
-            color={bookmarkedIds.has(item.id) ? "#ffd700" : "white"} // yellow when active
+            color={bookmarkedIds.has(item.id) ? "#ffd700" : "white"}
           />
         </Pressable>
 
-        {/* share */}
         <View style={{ alignItems: "center" }}>
           <Feather name="send" size={30} color="white" />
         </View>
@@ -715,13 +752,21 @@ useEffect(() => {
         }}
       >
         <Pressable
-  onPressIn={() => (globalThis as any).__prefetchProfile?.(item.user_id)}
-  onPress={() => router.push(`/profile?uid=${encodeURIComponent(item.user_id)}&uname=${encodeURIComponent(item.user)}`)}
->
-  <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
-    {item.user}
-  </Text>
-</Pressable>
+          onPressIn={() =>
+            (globalThis as any).__prefetchProfile?.(item.user_id)
+          }
+          onPress={() =>
+            router.push(
+              `/profile?uid=${encodeURIComponent(
+                item.user_id
+              )}&uname=${encodeURIComponent(item.user)}`
+            )
+          }
+        >
+          <Text style={{ color: "white", fontWeight: "700", fontSize: 16 }}>
+            {item.user}
+          </Text>
+        </Pressable>
         <MaterialCommunityIcons
           name="check-decagram"
           size={16}
@@ -744,8 +789,6 @@ useEffect(() => {
     </View>
   );
 
-  // replace the existing BottomNav definition
-
   const renderItem = ({ item }: { item: Item }) => {
     const isActive = item.id === activeId;
 
@@ -757,7 +800,6 @@ useEffect(() => {
           overflow: "hidden",
         }}
       >
-        {/* Only the video compresses */}
         <Animated.View
           style={{
             position: "absolute",
@@ -808,7 +850,6 @@ useEffect(() => {
           </View>
         </Animated.View>
 
-        {/* overlays stay stationary */}
         <TopBar />
         {RightRail(item)}
         {CaptionBar(item)}
@@ -824,7 +865,7 @@ useEffect(() => {
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
         pagingEnabled
-        snapToInterval={height} // use full screen height
+        snapToInterval={height}
         decelerationRate="fast"
         bounces={false}
         scrollEventThrottle={16}
@@ -848,12 +889,10 @@ useEffect(() => {
         }}
       />
 
-      {/* Static bottom nav, never scrolls */}
       <BottomNav />
-      {/* Comments Sheet */}
+
       {openCommentsFor ? (
         <>
-          {/* backdrop */}
           <Pressable
             onPress={closeComments}
             style={{
@@ -861,7 +900,7 @@ useEffect(() => {
               backgroundColor: "rgba(0,0,0,0.45)",
             }}
           />
-          {/* sheet */}
+
           <Animated.View
             style={{
               position: "absolute",
@@ -875,7 +914,6 @@ useEffect(() => {
               overflow: "hidden",
             }}
           >
-            {/* grabber + title */}
             <View
               {...pan.panHandlers}
               style={{ alignItems: "center", paddingTop: 8, paddingBottom: 6 }}
@@ -893,30 +931,54 @@ useEffect(() => {
               </Text>
             </View>
 
-            {/* comments list */}
             <FlatList
-  data={openCommentsFor ? (commentsByVideo[openCommentsFor] ?? []) : []}
-  keyExtractor={(c) => c.id}
-  contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 12 }}
-  renderItem={({ item }) => (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", paddingVertical: 10 }}>
-      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", marginRight: 10 }} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>
-          {item.username || item.users?.username || item.user_id?.slice(0, 6) || "user"}
-        </Text>
-        <Text style={{ color: "white", fontSize: 14, marginTop: 2 }}>
-          {item.text}
-        </Text>
-      </View>
-    </View>
-  )}
-/>
+              data={
+                openCommentsFor ? commentsByVideo[openCommentsFor] ?? [] : []
+              }
+              keyExtractor={(c) => c.id}
+              contentContainerStyle={{
+                paddingHorizontal: 14,
+                paddingBottom: 12,
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    paddingVertical: 10,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: "rgba(255,255,255,0.15)",
+                      marginRight: 10,
+                    }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}
+                    >
+                      {item.username ||
+                        item.users?.username ||
+                        item.user_id?.slice(0, 6) ||
+                        "user"}
+                    </Text>
+                    <Text
+                      style={{ color: "white", fontSize: 14, marginTop: 2 }}
+                    >
+                      {item.text}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            />
 
-            {/* input bar */}
             <Animated.View
               style={{
-                transform: [{ translateY: inputBarY }], // slides above keyboard
+                transform: [{ translateY: inputBarY }],
                 paddingTop: 10,
                 paddingHorizontal: 16,
                 paddingBottom: insets.bottom + 12,
@@ -926,7 +988,6 @@ useEffect(() => {
               }}
             >
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {/* avatar */}
                 <View
                   style={{
                     width: 32,
@@ -936,7 +997,6 @@ useEffect(() => {
                   }}
                 />
 
-                {/* input pill */}
                 <View
                   style={{
                     flex: 1,
@@ -950,109 +1010,191 @@ useEffect(() => {
                   }}
                 >
                   <TextInput
-  placeholder="Add comment..."
-  placeholderTextColor="rgba(255,255,255,0.6)"
-  style={{ flex: 1, color: "white", paddingVertical: 8 }}
-  value={openCommentsFor ? (commentInput[openCommentsFor] ?? "") : ""}
-  onChangeText={(t) => {
-    if (!openCommentsFor) return;
-    setCommentInput((prev) => ({ ...prev, [openCommentsFor]: t }));
-  }}
-  returnKeyType="send"
-  onSubmitEditing={async () => {
-    if (!openCommentsFor) return;
-    const text = (commentInput[openCommentsFor] ?? "").trim();
-    if (!text || sending) return;
-    setSending(true);
-    try {
-      const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(USER_ID)}&text=${encodeURIComponent(text)}`;
-      const resp = await fetch(url, { method: 'POST' });
-      const raw = await resp.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch (e) {
-        console.warn('Non-JSON POST /comments response:', raw?.slice(0, 200));
-      }
-      if (!resp.ok) {
-        console.warn('POST /comments failed', resp.status, json || raw);
-        setSending(false);
-        return;
-      }
-      const newRow: Comment = json?.comment ?? { id: String(Date.now()), user_id: USER_ID, text, username: USERNAME };
-      setCommentsByVideo((prev) => ({
-        ...prev,
-        [openCommentsFor]: [...(prev[openCommentsFor] ?? []), newRow],
-      }));
-      setCommentInput((prev) => ({ ...prev, [openCommentsFor]: "" }));
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === openCommentsFor
-            ? { ...it, comments: Number((json && (json.comment_count ?? json.video?.comment_count)) ?? (it.comments ?? 0) + 1) }
-            : it
-        )
-      );
-    } catch (e) {
-      console.warn("Failed to send comment", e);
-    } finally {
-      setSending(false);
-    }
-  }}
-/>
-<Ionicons name="happy-outline" size={20} color="rgba(255,255,255,0.8)" />
-</View>
+                    placeholder="Add comment..."
+                    placeholderTextColor="rgba(255,255,255,0.6)"
+                    style={{ flex: 1, color: "white", paddingVertical: 8 }}
+                    value={
+                      openCommentsFor ? commentInput[openCommentsFor] ?? "" : ""
+                    }
+                    onChangeText={(t) => {
+                      if (!openCommentsFor) return;
+                      setCommentInput((prev) => ({
+                        ...prev,
+                        [openCommentsFor]: t,
+                      }));
+                    }}
+                    returnKeyType="send"
+                    onSubmitEditing={async () => {
+                      if (!openCommentsFor) return;
+                      const text = (commentInput[openCommentsFor] ?? "").trim();
+                      if (!text || sending) return;
+                      setSending(true);
+                      try {
+                        const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(
+                          USER_ID
+                        )}&text=${encodeURIComponent(text)}`;
+                        const resp = await fetch(url, { method: "POST" });
+                        const raw = await resp.text();
+                        let json: any = null;
+                        try {
+                          json = raw ? JSON.parse(raw) : null;
+                        } catch (e) {
+                          console.warn(
+                            "Non-JSON POST /comments response:",
+                            raw?.slice(0, 200)
+                          );
+                        }
+                        if (!resp.ok) {
+                          console.warn(
+                            "POST /comments failed",
+                            resp.status,
+                            json || raw
+                          );
+                          setSending(false);
+                          return;
+                        }
+                        const newRow: Comment = json?.comment ?? {
+                          id: String(Date.now()),
+                          user_id: USER_ID,
+                          text,
+                          username: USERNAME,
+                        };
+                        setCommentsByVideo((prev) => ({
+                          ...prev,
+                          [openCommentsFor]: [
+                            ...(prev[openCommentsFor] ?? []),
+                            newRow,
+                          ],
+                        }));
+                        setCommentInput((prev) => ({
+                          ...prev,
+                          [openCommentsFor]: "",
+                        }));
+                        setItems((prev) =>
+                          prev.map((it) =>
+                            it.id === openCommentsFor
+                              ? {
+                                  ...it,
+                                  comments: Number(
+                                    (json &&
+                                      (json.comment_count ??
+                                        json.video?.comment_count)) ??
+                                      (it.comments ?? 0) + 1
+                                  ),
+                                }
+                              : it
+                          )
+                        );
+                      } catch (e) {
+                        console.warn("Failed to send comment", e);
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                  />
+                  <Ionicons
+                    name="happy-outline"
+                    size={20}
+                    color="rgba(255,255,255,0.8)"
+                  />
+                </View>
 
-<Pressable
-  disabled={sending || !openCommentsFor || !(commentInput[openCommentsFor]?.trim())}
-  onPress={async () => {
-    if (!openCommentsFor) return;
-    const text = (commentInput[openCommentsFor] ?? "").trim();
-    if (!text) return;
-    setSending(true);
-    try {
-      const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(USER_ID)}&text=${encodeURIComponent(text)}`;
-      const resp = await fetch(url, { method: 'POST' });
-      const raw = await resp.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch (e) {
-        console.warn('Non-JSON POST /comments response:', raw?.slice(0, 200));
-      }
-      if (!resp.ok) {
-        console.warn('POST /comments failed', resp.status, json || raw);
-        setSending(false);
-        return;
-      }
-      const newRow: Comment = json?.comment ?? { id: String(Date.now()), user_id: USER_ID, text, username: USERNAME };
-      setCommentsByVideo((prev) => ({
-        ...prev,
-        [openCommentsFor]: [...(prev[openCommentsFor] ?? []), newRow],
-      }));
-      setCommentInput((prev) => ({ ...prev, [openCommentsFor]: "" }));
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === openCommentsFor
-            ? { ...it, comments: Number((json && (json.comment_count ?? json.video?.comment_count)) ?? (it.comments ?? 0) + 1) }
-            : it
-        )
-      );
-    } catch (e) {
-      console.warn("Failed to send comment", e);
-    } finally {
-      setSending(false);
-    }
-  }}
-  style={{
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    opacity: sending || !openCommentsFor || !(commentInput[openCommentsFor]?.trim()) ? 0.5 : 1,
-  }}
->
-  <Text style={{ color: "#33c759", fontWeight: "700", fontSize: 14 }}>Send</Text>
-</Pressable>
+                <Pressable
+                  disabled={
+                    sending ||
+                    !openCommentsFor ||
+                    !commentInput[openCommentsFor]?.trim()
+                  }
+                  onPress={async () => {
+                    if (!openCommentsFor) return;
+                    const text = (commentInput[openCommentsFor] ?? "").trim();
+                    if (!text) return;
+                    setSending(true);
+                    try {
+                      const url = `${API_BASE}/videos/${openCommentsFor}/comments?user_id=${encodeURIComponent(
+                        USER_ID
+                      )}&text=${encodeURIComponent(text)}`;
+                      const resp = await fetch(url, { method: "POST" });
+                      const raw = await resp.text();
+                      let json: any = null;
+                      try {
+                        json = raw ? JSON.parse(raw) : null;
+                      } catch (e) {
+                        console.warn(
+                          "Non-JSON POST /comments response:",
+                          raw?.slice(0, 200)
+                        );
+                      }
+                      if (!resp.ok) {
+                        console.warn(
+                          "POST /comments failed",
+                          resp.status,
+                          json || raw
+                        );
+                        setSending(false);
+                        return;
+                      }
+                      const newRow: Comment = json?.comment ?? {
+                        id: String(Date.now()),
+                        user_id: USER_ID,
+                        text,
+                        username: USERNAME,
+                      };
+                      setCommentsByVideo((prev) => ({
+                        ...prev,
+                        [openCommentsFor]: [
+                          ...(prev[openCommentsFor] ?? []),
+                          newRow,
+                        ],
+                      }));
+                      setCommentInput((prev) => ({
+                        ...prev,
+                        [openCommentsFor]: "",
+                      }));
+                      setItems((prev) =>
+                        prev.map((it) =>
+                          it.id === openCommentsFor
+                            ? {
+                                ...it,
+                                comments: Number(
+                                  (json &&
+                                    (json.comment_count ??
+                                      json.video?.comment_count)) ??
+                                    (it.comments ?? 0) + 1
+                                ),
+                              }
+                            : it
+                        )
+                      );
+                    } catch (e) {
+                      console.warn("Failed to send comment", e);
+                    } finally {
+                      setSending(false);
+                    }
+                  }}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 16,
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                    opacity:
+                      sending ||
+                      !openCommentsFor ||
+                      !commentInput[openCommentsFor]?.trim()
+                        ? 0.5
+                        : 1,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#33c759",
+                      fontWeight: "700",
+                      fontSize: 14,
+                    }}
+                  >
+                    Send
+                  </Text>
+                </Pressable>
               </View>
             </Animated.View>
           </Animated.View>
