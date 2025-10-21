@@ -49,7 +49,4 @@ npm install
 npx run dev
 ```
 
-
-https://github.com/user-attachments/assets/10a68dd0-6018-42ae-8109-693b5071d20e
-
-
+https://github.com/user-attachments/assets/80f4365f-786f-4430-9878-46c169d8756f
