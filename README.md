@@ -46,7 +46,7 @@ Run the front end
 ```bash
 cd gigglesproj
 npm install
-npx run dev
+npx expo start
 ```
 
 https://github.com/user-attachments/assets/80f4365f-786f-4430-9878-46c169d8756f
