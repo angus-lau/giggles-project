@@ -20,7 +20,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Video, ResizeMode, type AVPlaybackSource } from "expo-av";
+import { type AVPlaybackSource } from "expo-av";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -32,6 +32,7 @@ import {
   AntDesign,
 } from "@expo/vector-icons";
 import { FontAwesome } from "@expo/vector-icons";
+import VideoCard from "../../components/VideoCard";
 type Item = {
   id: string;
   url: string;
@@ -811,42 +812,20 @@ export default function Feed() {
           }}
         >
           <View style={{ flex: 1, paddingTop: insets.top }}>
-            <Video
-              ref={(r) => {
+            <VideoCard
+              uri={item.url}
+              onRef={(r) => {
                 players.current.set(item.id, r);
               }}
-              source={{ uri: item.url }}
-              style={{ flex: 1, width }}
-              resizeMode={ResizeMode.COVER}
-              isLooping
               shouldPlay={isActive && !paused}
               onError={() => handleVideoError(item.id, { uri: item.url })}
-            />
-
-            <Pressable
+              style={{ flex: 1, width }}
+              isActive={isActive}
+              paused={paused}
               onPress={() => {
                 if (isActive) setPaused((v) => !v);
               }}
-              style={StyleSheet.absoluteFill}
-            >
-              {isActive && paused ? (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    flex: 1,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Ionicons
-                    name="play"
-                    size={60}
-                    color="white"
-                    style={{ opacity: 0.3 }}
-                  />
-                </View>
-              ) : null}
-            </Pressable>
+            />
           </View>
         </Animated.View>
 
